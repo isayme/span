@@ -1,14 +1,13 @@
 package cmd
 
 import (
-	"crypto/subtle"
+	"encoding/hex"
 	"fmt"
+	"net/http"
 	"os"
 
 	"github.com/isayme/go-logger"
 	"github.com/isayme/span/span"
-	"github.com/labstack/echo/v4"
-	"github.com/labstack/echo/v4/middleware"
 	"github.com/spf13/cobra"
 	"github.com/studio-b12/gowebdav"
 	"golang.org/x/net/webdav"
@@ -34,9 +33,6 @@ var rootCmd = &cobra.Command{
 			os.Exit(0)
 		}
 
-		logger.SetFormat(logger.FORMAT_CONSOLE)
-		logger.SetLevel(logLevel)
-
 		conf := span.GetConfig()
 
 		upstreamWebdav := conf.Upstream.Webdav
@@ -46,38 +42,80 @@ var rootCmd = &cobra.Command{
 			logger.Panic(err)
 		}
 
-		fs := span.NewFileSystem(webdavClient)
+		password := conf.Password
+		if password == "" {
+			password, err := span.ReadPassword("请输入密码:")
+			if err != nil {
+				logger.Panicf("读取密码失败: %v", err)
+			}
+			if span.IsPasswordTooWeak(password) {
+				logger.Panic("密码太弱")
+			}
+		}
+
+		err = span.InitBolt("")
+		if err != nil {
+			logger.Panicf("初始化Bolt失败: %v", err)
+		}
+
+		var masterKey []byte
+		salt, encryptMasterKey, authKey, err := span.ReadBolt()
+		if err != nil {
+			logger.Panicf("读Bolt失败: %v", err)
+		}
+
+		if len(salt) > 0 && len(encryptMasterKey) > 0 && len(authKey) > 0 {
+			logger.Debug("非首次登录")
+
+			encryptKey, expectAuthKey := span.GenEncryptKeyAndAuthKeyFromPassword(password, salt)
+			if hex.EncodeToString(authKey) != hex.EncodeToString(expectAuthKey) {
+				logger.Panic("密码不匹配")
+			}
+
+			masterKey = span.MustDecryptMasterKey(encryptKey, encryptMasterKey)
+		} else if len(salt) == 0 && len(encryptMasterKey) == 0 && len(authKey) == 0 {
+			logger.Debug("首次登录")
+
+			salt = span.MustRandomSalt()
+			masterKey = span.MustRandomMasterKey()
+			encryptKey, authKey := span.GenEncryptKeyAndAuthKeyFromPassword(password, salt)
+			encryptMasterKey = span.MustEncryptMasterKey(encryptKey, masterKey)
+
+			span.WriteBolt(salt, encryptMasterKey, authKey)
+		} else {
+			logger.Panic("Bolt数据异常")
+		}
+
+		fs := span.NewFileSystem(webdavClient, masterKey)
 		addr := fmt.Sprintf(":%d", listenPort)
 		logger.Infof("服务已启动, 端口: %d ", listenPort)
-
-		app := echo.New()
-		app.Use(middleware.RequestID())
-		// app.Use(middleware.Logger())
-
-		// basic auth
-		webdavConfig := conf.Webdav
-		if webdavConfig.User != "" && webdavConfig.Password != "" {
-			app.Use(middleware.BasicAuth(func(username, password string, c echo.Context) (bool, error) {
-				if subtle.ConstantTimeCompare([]byte(username), []byte(webdavConfig.User)) == 1 &&
-					subtle.ConstantTimeCompare([]byte(password), []byte(webdavConfig.Password)) == 1 {
-					return true, nil
-				}
-				return false, nil
-			}))
-		}
 
 		// webdav route
 		webdavHandler := &webdav.Handler{
 			FileSystem: fs,
 			LockSystem: webdav.NewMemLS(),
-			// Logger: func(r *http.Request, err error) {
-			// 	logger.Infof("webdav method: %s, url: %v, err: %v", r.Method, r.URL.String(), err)
-			// },
+			Logger: func(r *http.Request, err error) {
+				logger.Infof("webdav method: %s, url: %v, err: %v", r.Method, r.URL.String(), err)
+			},
 		}
 
-		app.Any("/*", echo.WrapHandler(webdavHandler))
+		err = http.ListenAndServe(addr, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// basic auth
+			webdavConfig := conf.Webdav
+			if webdavConfig.User != "" && webdavConfig.Password != "" {
+				username, password, ok := r.BasicAuth()
+				if !ok || webdavConfig.User != username || webdavConfig.Password != password {
+					w.WriteHeader(401)
+					w.Write([]byte("账号密码不匹配"))
+					return
+				}
+			}
 
-		logger.Panic(app.Start(addr))
+			webdavHandler.ServeHTTP(w, r)
+		}))
+		if err != nil {
+			logger.Errorf("启动服务失败: %v", err)
+		}
 	},
 }
 

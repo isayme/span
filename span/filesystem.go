@@ -1,6 +1,7 @@
 package span
 
 import (
+	"bytes"
 	"context"
 	"io/fs"
 	"os"
@@ -15,12 +16,27 @@ var _ webdav.FileSystem = &FileSystem{}
 
 type FileSystem struct {
 	client *gowebdav.Client
+
+	masterKey []byte
 }
 
-func NewFileSystem(client *gowebdav.Client) webdav.FileSystem {
+func NewFileSystem(client *gowebdav.Client, masterKey []byte) webdav.FileSystem {
 	return &FileSystem{
-		client: client,
+		client:    client,
+		masterKey: masterKey,
 	}
+}
+
+func (fs *FileSystem) resolveName(name string) string {
+	names := bytes.Split([]byte(name), []byte("/"))
+
+	for idx, item := range names {
+		if len(item) > 0 {
+			names[idx] = []byte(Base64EncodeToString(MustEncryptFileName(fs.masterKey, item)))
+		}
+	}
+
+	return string(bytes.Join(names, []byte("/")))
 }
 
 func (fs *FileSystem) Mkdir(ctx context.Context, name string, perm os.FileMode) (err error) {
@@ -32,7 +48,7 @@ func (fs *FileSystem) Mkdir(ctx context.Context, name string, perm os.FileMode) 
 		}
 	}()
 
-	return fs.client.Mkdir(name, perm)
+	return fs.client.Mkdir(fs.resolveName(name), perm)
 }
 
 func (fs *FileSystem) OpenFile(ctx context.Context, name string, flag int, perm os.FileMode) (result webdav.File, err error) {
@@ -58,9 +74,9 @@ func (fs *FileSystem) OpenFile(ctx context.Context, name string, flag int, perm 
 	}
 
 	if flag&os.O_CREATE > 0 {
-		return NewWritableFile(fs, name), nil
+		return NewWritableFile(fs, fs.masterKey, name), nil
 	} else {
-		return NewReadableFile(fs, name), nil
+		return NewReadableFile(fs, fs.masterKey, name), nil
 	}
 }
 
@@ -73,7 +89,7 @@ func (fs *FileSystem) RemoveAll(ctx context.Context, name string) (err error) {
 		}
 	}()
 
-	return fs.client.RemoveAll(name)
+	return fs.client.RemoveAll(fs.resolveName(name))
 }
 
 func (fs *FileSystem) Rename(ctx context.Context, oldName, newName string) (err error) {
@@ -85,7 +101,7 @@ func (fs *FileSystem) Rename(ctx context.Context, oldName, newName string) (err 
 		}
 	}()
 
-	return fs.client.Rename(oldName, newName, true)
+	return fs.client.Rename(fs.resolveName(oldName), fs.resolveName(newName), true)
 }
 
 func (fs *FileSystem) Stat(ctx context.Context, name string) (fi os.FileInfo, err error) {
@@ -97,11 +113,21 @@ func (fs *FileSystem) Stat(ctx context.Context, name string) (fi os.FileInfo, er
 		}
 	}()
 
-	fi, err = fs.client.Stat(name)
+	fi, err = fs.client.Stat(fs.resolveName(name))
 	if err != nil && gowebdav.IsErrNotFound(err) {
 		err = os.ErrNotExist
 	}
 
+	if err != nil {
+		fi = nil
+		return
+	}
+
+	if name == "/" {
+		return
+	}
+
+	fi = NewFileInfo(fs.masterKey, fi)
 	return
 }
 
@@ -114,5 +140,10 @@ func (fs *FileSystem) ReadDir(ctx context.Context, name string) (fis []fs.FileIn
 		}
 	}()
 
-	return fs.client.ReadDir(name)
+	fis, err = fs.client.ReadDir(fs.resolveName(name))
+	for idx := range fis {
+		fi := NewFileInfo(fs.masterKey, fis[idx])
+		fis[idx] = fi
+	}
+	return
 }

@@ -5,6 +5,15 @@ import (
 	"crypto/cipher"
 )
 
+func MustAesCbcEncrypt(key, iv []byte, plaintext []byte) []byte {
+	result, err := AesCbcEncrypt(key, iv, plaintext)
+	if err != nil {
+		panic(err)
+	}
+
+	return result
+}
+
 func AesCbcEncrypt(key, iv []byte, plaintext []byte) ([]byte, error) {
 	c, err := aes.NewCipher(key)
 	if err != nil {
@@ -16,6 +25,15 @@ func AesCbcEncrypt(key, iv []byte, plaintext []byte) ([]byte, error) {
 	b.CryptBlocks(dst, plaintext)
 
 	return dst, nil
+}
+
+func MustAesCbcDecrypt(key, iv []byte, ciphertext []byte) []byte {
+	result, err := AesCbcDecrypt(key, iv, ciphertext)
+	if err != nil {
+		panic(err)
+	}
+
+	return result
 }
 
 func AesCbcDecrypt(key, iv []byte, ciphertext []byte) ([]byte, error) {

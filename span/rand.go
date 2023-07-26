@@ -11,3 +11,11 @@ func randomBytes(n int) ([]byte, error) {
 
 	return buf, nil
 }
+
+func mustRandomBytes(n int) []byte {
+	b, err := randomBytes(n)
+	if err != nil {
+		panic("random bytes fail: " + err.Error())
+	}
+	return b
+}

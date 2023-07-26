@@ -12,7 +12,9 @@ func AesCtrEncrypt(key, iv []byte, plaintext []byte) ([]byte, error) {
 	}
 
 	b := cipher.NewCTR(c, iv)
-	dst := make([]byte, len(plaintext))
+	// dst := make([]byte, len(plaintext))
+	dst := plaintext
+
 	b.XORKeyStream(dst, plaintext)
 
 	return dst, nil
@@ -25,7 +27,8 @@ func AesCtrDecrypt(key, iv []byte, ciphertext []byte) ([]byte, error) {
 	}
 
 	b := cipher.NewCTR(c, iv)
-	dst := make([]byte, len(ciphertext))
+	// dst := make([]byte, len(ciphertext))
+	dst := ciphertext
 	b.XORKeyStream(dst, ciphertext)
 
 	return dst, nil
