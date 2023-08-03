@@ -106,10 +106,12 @@ func (fs *FileSystem) Rename(ctx context.Context, oldName, newName string) (err 
 
 func (fs *FileSystem) Stat(ctx context.Context, name string) (fi os.FileInfo, err error) {
 	defer func() {
-		if err != nil {
-			logger.Errorf("查看文件 '%s' 信息失败: %v", name, err)
-		} else {
+		if err == nil {
 			logger.Infof("查看文件 '%s' 信息成功, IsDir(): %v, name: %v, mod %v", name, fi.IsDir(), fi.Name(), fi.Mode())
+		} else if err == os.ErrNotExist {
+			logger.Infof("查看文件 '%s' 信息成功: 文件不存在", name)
+		} else {
+			logger.Errorf("查看文件 '%s' 信息失败: %v", name, err)
 		}
 	}()
 

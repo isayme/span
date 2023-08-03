@@ -2,7 +2,6 @@ package span
 
 import (
 	"bytes"
-	"crypto/aes"
 	"fmt"
 	"io"
 	"io/fs"
@@ -27,16 +26,9 @@ type WritableFile struct {
 }
 
 func NewWritableFile(fs *FileSystem, masterKey []byte, path string) *WritableFile {
-	rc, wc := io.Pipe()
-
-	go func() {
-		fs.client.WriteStream(fs.resolveName(path), rc, FILE_MODE)
-	}()
-
 	return &WritableFile{
 		fs:        fs,
 		path:      path,
-		wc:        wc,
 		buffer:    bytes.NewBuffer(nil),
 		fileKey:   mustRandomBytes(16),
 		masterKey: masterKey,
@@ -58,19 +50,14 @@ func (file *WritableFile) Close() (err error) {
 		}
 	}()
 
-	err = file.writeFileKey()
-	if err != nil {
-		return
-	}
-
 	if file.buffer.Len() > 0 {
-		buf := bufferpool.Get(aes.BlockSize)
+		buf := bufferpool.Get(aesBlockSize)
 		defer bufferpool.Put(buf)
 		n, _ := file.buffer.Read(buf)
 
-		iv := bufferpool.Get(aes.BlockSize)
+		iv := bufferpool.Get(aesBlockSize)
 		defer bufferpool.Put(iv)
-		getIv(file.size, iv)
+		genIV(file.size, iv)
 
 		_, err = EncryptFileContent(file.fileKey, iv, buf)
 		if err != nil {
@@ -80,9 +67,14 @@ func (file *WritableFile) Close() (err error) {
 		if err != nil {
 			return
 		}
+		file.size = file.size + int64(n)
 	}
 
 	file.buffer.Reset()
+
+	if file.wc == nil {
+		return nil
+	}
 
 	return file.wc.Close()
 }
@@ -95,6 +87,19 @@ func (file *WritableFile) Seek(offset int64, whence int) (int64, error) {
 	return 0, fmt.Errorf("not support")
 }
 
+func (file *WritableFile) ensureWc() error {
+	if file.wc != nil {
+		return nil
+	}
+
+	rc, wc := io.Pipe()
+
+	go func() {
+		file.fs.client.WriteStream(file.fs.resolveName(file.path), rc, FILE_MODE)
+	}()
+	file.wc = wc
+	return nil
+}
 func (file *WritableFile) writeFileKey() (err error) {
 	defer func() {
 		if err != nil {
@@ -104,6 +109,11 @@ func (file *WritableFile) writeFileKey() (err error) {
 
 	if file.encryptFileKeyWritten {
 		return nil
+	}
+
+	err = file.ensureWc()
+	if err != nil {
+		return err
 	}
 
 	encryptFileKey, err := EncryptFileKey(file.masterKey, file.fileKey)
@@ -133,19 +143,22 @@ func (file *WritableFile) Write(p []byte) (n int, err error) {
 	}
 
 	n, err = file.buffer.Write(p)
+	if err != nil {
+		return
+	}
 
 	file.modTime = time.Now()
 
-	iv := bufferpool.Get(aes.BlockSize)
+	iv := bufferpool.Get(aesBlockSize)
 	defer bufferpool.Put(iv)
 
-	buf := bufferpool.Get(aes.BlockSize)
+	buf := bufferpool.Get(aesBlockSize)
 	defer bufferpool.Put(buf)
 
-	for file.buffer.Len() >= aes.BlockSize {
+	for file.buffer.Len() >= aesBlockSize {
 		file.buffer.Read(buf)
 
-		getIv(file.size, iv)
+		genIV(file.size, iv)
 
 		_, err := EncryptFileContent(file.fileKey, iv, buf)
 		if err != nil {
@@ -156,7 +169,7 @@ func (file *WritableFile) Write(p []byte) (n int, err error) {
 		if err != nil {
 			return 0, err
 		}
-		file.size = file.size + int64(aseBlockSize)
+		file.size = file.size + int64(aesBlockSize)
 	}
 
 	return
@@ -171,7 +184,7 @@ func (file *WritableFile) Size() int64 {
 }
 
 func (file *WritableFile) Mode() fs.FileMode {
-	return 0660
+	return FILE_MODE
 }
 func (file *WritableFile) ModTime() time.Time {
 	return file.modTime

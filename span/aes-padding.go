@@ -5,10 +5,10 @@ import (
 	"crypto/aes"
 )
 
-var aseBlockSize = aes.BlockSize
+var aesBlockSize = aes.BlockSize
 
 func Pkcs5Padding(b []byte) []byte {
-	padSize := aseBlockSize - len(b)%aseBlockSize
+	padSize := aesBlockSize - len(b)%aesBlockSize
 	padding := bytes.Repeat([]byte{byte(padSize)}, padSize)
 	return append(b, padding...)
 }

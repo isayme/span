@@ -3,8 +3,6 @@ package span
 import (
 	"bytes"
 	"context"
-	"crypto/aes"
-	"encoding/binary"
 	"fmt"
 	"io"
 	"io/fs"
@@ -70,7 +68,7 @@ func (file *ReadableFile) readFileKey() (err error) {
 	}
 	defer rc.Close()
 
-	encryptFileKey := bufferpool.Get(aes.BlockSize)
+	encryptFileKey := bufferpool.Get(fileKeySize)
 	defer bufferpool.Put(encryptFileKey)
 	_, err = io.ReadFull(rc, encryptFileKey)
 	if err != nil {
@@ -115,16 +113,16 @@ func (file *ReadableFile) Read(p []byte) (n int, err error) {
 		return file.buffer.Read(p)
 	}
 
-	buf := bufferpool.Get(aes.BlockSize)
+	buf := bufferpool.Get(aesBlockSize)
 	defer bufferpool.Put(buf)
 	nr, err := io.ReadFull(file.rc, buf)
 	if err == io.EOF {
 		return
 	}
 
-	iv := bufferpool.Get(aes.BlockSize)
+	iv := bufferpool.Get(aesBlockSize)
 	defer bufferpool.Put(iv)
-	getIv(file.pos, iv)
+	genIV(file.pos, iv)
 	_, err = DecryptFileContent(file.fileKey, iv, buf[:nr])
 	if err != nil {
 		return
@@ -134,15 +132,6 @@ func (file *ReadableFile) Read(p []byte) (n int, err error) {
 	file.buffer.Write(buf[:nr])
 
 	return file.buffer.Read(p)
-}
-
-func getIv(pos int64, iv []byte) {
-	for i := 0; i < len(iv); i++ {
-		iv[i] = 0
-	}
-
-	n := pos / int64(aseBlockSize) * int64(aseBlockSize)
-	binary.BigEndian.PutUint64(iv[8:], uint64(n))
 }
 
 func (file *ReadableFile) Seek(offset int64, whence int) (n int64, err error) {
