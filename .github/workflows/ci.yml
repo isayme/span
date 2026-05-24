@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build-go:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        go-version: [1.26]
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '${{ matrix.go-version }}'
+
+      - name: Build
+        run: mkdir -p dist && go build -o ./dist/span main.go
+  
