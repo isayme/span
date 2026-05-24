@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/isayme/go-logger"
+	"github.com/isayme/go-uuidv4"
 	"github.com/isayme/span/span"
 	"github.com/spf13/cobra"
 	"github.com/studio-b12/gowebdav"
@@ -37,6 +38,13 @@ var rootCmd = &cobra.Command{
 
 		upstreamWebdav := conf.Upstream.Webdav
 		webdavClient := gowebdav.NewClient(upstreamWebdav.Url, upstreamWebdav.User, upstreamWebdav.Password)
+		webdavClient.SetHeader("User-Agent", span.UserAgent)
+		webdavClient.SetInterceptor(func(method string, rq *http.Request) {
+			reqId, _ := uuidv4.Generate()
+			rq.Header.Set("x-request-id", reqId)
+
+			logger.Debugf("webdav method: %s, url: %v, reqId: %v", method, rq.URL.String(), reqId)
+		})
 		err = webdavClient.Connect()
 		if err != nil {
 			logger.Panic(err)

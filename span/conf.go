@@ -22,6 +22,7 @@ type UpstreamWebdavConfig struct {
 	Url      string `json:"url" yaml:"url"`
 	User     string `json:"user" yaml:"user"`
 	Password string `json:"password" yaml:"password"`
+	Prefix   string `json:"prefix" yaml:"prefix"`
 }
 
 type UpstreamConfig struct {

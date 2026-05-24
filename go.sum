@@ -14,6 +14,8 @@ github.com/isayme/go-config v0.1.0 h1:V7Y6jUMohcokytim+2E/ZuFOB8tih7gl6XSmwGDyB7
 github.com/isayme/go-config v0.1.0/go.mod h1:cROTfZ5LJpsAb0CQszCNt5PzlPUjJuXRLxqVji4nc4M=
 github.com/isayme/go-logger v0.3.1 h1:fesAF7W9aIOCJwR6PrepjTe3ePPB2+HQEWFyiGj4l4I=
 github.com/isayme/go-logger v0.3.1/go.mod h1:2AFlHliE6Abc5O25bVOIm0P3SmfkG7IjV5gdOq060bk=
+github.com/isayme/go-uuidv4 v0.0.0-20180702013938-bb41ceeebccb h1:/bSkrhGcebt8dakod6dTd2fPQMkXwGHDMJ8MYaY0I9Y=
+github.com/isayme/go-uuidv4 v0.0.0-20180702013938-bb41ceeebccb/go.mod h1:EbYcpnhwXop0BMmf5ZKktv5MVLrQMOuzI225KGoTHkM=
 github.com/nbutton23/zxcvbn-go v0.0.0-20210217022336-fa2cb2858354 h1:4kuARK6Y6FxaNu/BnU2OAaLF86eTVhP2hjTB6iMvItA=
 github.com/nbutton23/zxcvbn-go v0.0.0-20210217022336-fa2cb2858354/go.mod h1:KSVJerMDfblTH7p5MZaTt+8zaT2iEk3AkVb9PQdZuE8=
 github.com/pkg/errors v0.9.1 h1:FEBLx1zS214owpjy7qsBeixbURkuhQAwrK5UwLGTwt4=
