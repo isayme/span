@@ -26,4 +26,7 @@ jobs:
 
       - name: Build
         run: mkdir -p dist && go build -o ./dist/span main.go
+
+      - name: Test
+        run: go test -v ./...
   
