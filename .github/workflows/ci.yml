@@ -31,5 +31,5 @@ jobs:
         run: go test -v ./...
       
       - name: E2E Test
-        run: test-e2e
+        run: make test-e2e
   
