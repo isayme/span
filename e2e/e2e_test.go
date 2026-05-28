@@ -11,12 +11,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/hacdias/webdav/v5/lib"
 	"github.com/isayme/go-logger"
 	"github.com/isayme/span/span"
 	"github.com/stretchr/testify/require"
 	"github.com/studio-b12/gowebdav"
-	"go.uber.org/zap"
 	"golang.org/x/net/webdav"
 )
 
@@ -30,23 +28,10 @@ func TestE2E(t *testing.T) {
 	require.NoError(t, os.MkdirAll(spanDir, 0755))
 
 	// --- upstream server ---
-	upstreamCfg := &lib.Config{
-		Address: "127.0.0.1",
-		UserPermissions: lib.UserPermissions{
-			Directory:   upstreamDir,
-			Permissions: lib.Permissions{Create: true, Read: true, Update: true, Delete: true},
-		},
-		Log: lib.Log{
-			Format:  "console",
-			Outputs: []string{"stderr"},
-		},
+	upstreamHandler := &webdav.Handler{
+		FileSystem: webdav.Dir(upstreamDir), // Folder to share
+		LockSystem: webdav.NewMemLS(),
 	}
-	zapLogger, err := upstreamCfg.GetLogger()
-	require.NoError(t, err)
-	zap.ReplaceGlobals(zapLogger)
-
-	upstreamHandler, err := lib.NewHandler(upstreamCfg)
-	require.NoError(t, err)
 
 	upstreamMux := http.NewServeMux()
 	upstreamMux.Handle("/", upstreamHandler)
@@ -64,7 +49,7 @@ func TestE2E(t *testing.T) {
 	upstreamAddr := upstreamListener.Addr().String()
 
 	// --- span server ---
-	password := "this-is-a-strong-password-that-passes-zxcvbn-1234567890!"
+	password := "this-is-a-strong-password-that-passes-zxcvbn-1234567890!" + randomString(10)
 
 	boltPath := filepath.Join(spanDir, "span.db")
 	require.NoError(t, span.InitBolt(boltPath))
