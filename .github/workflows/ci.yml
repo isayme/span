@@ -27,6 +27,9 @@ jobs:
       - name: Build
         run: mkdir -p dist && go build -o ./dist/span main.go
 
-      - name: Test
+      - name: Unit Test
         run: go test -v ./...
+      
+      - name: E2E Test
+        run: test-e2e
   

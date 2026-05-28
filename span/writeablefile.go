@@ -34,15 +34,19 @@ type WritableFile struct {
 	fileKey   []byte
 	// file key 已写入标识
 	encryptedFileKeyWritten bool
+
+	// upstreamPutDone signals that the upstream PUT has completed
+	upstreamPutDone chan error
 }
 
 func NewWritableFile(fs *FileSystem, masterKey []byte, path string) *WritableFile {
 	file := &WritableFile{
-		fs:        fs,
-		path:      path,
-		buffer:    bytes.NewBuffer(nil),
-		fileKey:   mustRandomFileKey(),
-		masterKey: masterKey,
+		fs:              fs,
+		path:            path,
+		buffer:          bytes.NewBuffer(nil),
+		fileKey:         mustRandomFileKey(),
+		masterKey:       masterKey,
+		upstreamPutDone: make(chan error, 1),
 	}
 	file.writeFileKey()
 	return file
@@ -89,7 +93,19 @@ func (file *WritableFile) Close() (err error) {
 		return nil
 	}
 
-	return file.wc.Close()
+	err = file.wc.Close()
+	if err != nil {
+		return
+	}
+
+	// Wait for the upstream PUT to complete
+	putErr := <-file.upstreamPutDone
+	if putErr != nil {
+		logger.Warnf("上传文件失败, name: %s, err: %v", file.path, putErr)
+		err = putErr
+	}
+
+	return
 }
 
 func (file *WritableFile) Read(p []byte) (n int, err error) {
@@ -108,7 +124,8 @@ func (file *WritableFile) ensureWc() error {
 	rc, wc := io.Pipe()
 
 	go func() {
-		file.fs.client.WriteStream(file.fs.resolveName(file.path), rc, FILE_MODE)
+		err := file.fs.client.WriteStream(file.fs.resolveName(file.path), rc, FILE_MODE)
+		file.upstreamPutDone <- err
 	}()
 	file.wc = wc
 	return nil

@@ -18,7 +18,8 @@ type ReadableFile struct {
 	fs   *FileSystem
 	path string
 	rc   io.ReadCloser
-	pos  int64
+	// 当前读到的位置
+	pos int64
 
 	fileKey   []byte
 	masterKey []byte
