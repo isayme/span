@@ -32,6 +32,7 @@ type UpstreamConfig struct {
 type Config struct {
 	Logger Logger `json:"logger" yaml:"logger"`
 
+	// Password user master key
 	Password string `json:"password" yaml:"password"`
 
 	Webdav WebdavConfig `json:"webdav" yaml:"webdav"`

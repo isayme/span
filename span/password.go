@@ -13,6 +13,7 @@ import (
 const materKeySize = aes.BlockSize
 const saltSize = aes.BlockSize
 const fileKeySize = aes.BlockSize
+const ivSize = aes.BlockSize
 
 func ReadPassword(promt string) (string, error) {
 	logger.Info(promt)
@@ -24,22 +25,26 @@ func ReadPassword(promt string) (string, error) {
 	return string(password), nil
 }
 
+// MustRandomMasterKey init random master key， 16bytes
 func MustRandomMasterKey() []byte {
 	return mustRandomBytes(materKeySize)
 }
 
+// MustRandomSalt init random salt， 16bytes
 func MustRandomSalt() []byte {
 	return mustRandomBytes(saltSize)
 }
 
 func GenEncryptKeyAndAuthKeyFromPassword(password string, salt []byte) (encryptKey, authKey []byte) {
-	keyLen := 512 / 8
+	keyLen := 256 / 8
+	// Derived Key = PBKDF2-HMAC-SHA-512( Password , Salt , Iterations , Length )
 	key := pbkdf2.Key([]byte(password), salt, 100000, keyLen, sha512.New)
 	encryptKey = key[0 : keyLen/2]
 	authKey = key[keyLen/2:]
 	return
 }
 
+// MustEncryptMasterKey encryt master key. Encrypted Master Key = AES-ECB( Derived Encryption Key , Master Key )
 func MustEncryptMasterKey(encryptKey, masterKey []byte) []byte {
 	result, err := EncryptMasterKey(encryptKey, masterKey)
 	if err != nil {
@@ -56,8 +61,8 @@ func EncryptMasterKey(encryptKey, masterKey []byte) ([]byte, error) {
 	return AesEcbEncrypt(encryptKey, masterKey)
 }
 
-func MustDecryptMasterKey(encryptKey, encryptMasterKey []byte) []byte {
-	result, err := DecryptMasterKey(encryptKey, encryptMasterKey)
+func MustDecryptMasterKey(encryptKey, encryptedMasterKey []byte) []byte {
+	result, err := DecryptMasterKey(encryptKey, encryptedMasterKey)
 	if err != nil {
 		panic(err)
 	}
@@ -68,8 +73,8 @@ func MustDecryptMasterKey(encryptKey, encryptMasterKey []byte) []byte {
 /**
  * 解密获取 masterKey
  */
-func DecryptMasterKey(encryptKey, encryptMasterKey []byte) ([]byte, error) {
-	return AesEcbDecrypt(encryptKey, encryptMasterKey)
+func DecryptMasterKey(encryptKey, encryptedMasterKey []byte) ([]byte, error) {
+	return AesEcbDecrypt(encryptKey, encryptedMasterKey)
 }
 
 /**
@@ -79,60 +84,29 @@ func HashAuthKey(authKey []byte) []byte {
 	return Sha256(authKey)
 }
 
-func RandomFileKey() ([]byte, error) {
+func randomFileKey() ([]byte, error) {
 	return randomBytes(fileKeySize)
 }
 
-func EncryptFileKey(masterKey, fileKey []byte) ([]byte, error) {
+func mustRandomFileKey() []byte {
+	result, err := randomFileKey()
+	if err != nil {
+		panic(err)
+	}
+
+	return result
+}
+
+func encryptFileKey(masterKey, fileKey []byte) ([]byte, error) {
 	return AesEcbEncrypt(masterKey, fileKey)
 }
 
-func DecryptFileKey(masterKey, encryptFileKey []byte) ([]byte, error) {
-	return AesEcbDecrypt(masterKey, encryptFileKey)
+func decryptFileKey(masterKey, encryptedFileKey []byte) ([]byte, error) {
+	return AesEcbDecrypt(masterKey, encryptedFileKey)
 }
 
-func MustEncryptFileName(masterKey, fileName []byte) []byte {
-	result, err := EncryptFileName(masterKey, fileName)
-	if err != nil {
-		panic(err)
-	}
-
-	return result
-}
-
-func EncryptFileName(masterKey, fileName []byte) ([]byte, error) {
-	iv := Sha256(fileName)[0:16]
-	result, err := AesCbcEncrypt(masterKey, iv, Pkcs5Padding(fileName))
-	if err != nil {
-		return nil, err
-	}
-
-	return append(iv, result...), nil
-}
-
-func MustDecryptFileName(masterKey, encryptFileName []byte) []byte {
-	result, err := DecryptFileName(masterKey, encryptFileName)
-	if err != nil {
-		panic(err)
-	}
-
-	return result
-}
-
-func DecryptFileName(masterKey, encryptFileName []byte) ([]byte, error) {
-	iv := encryptFileName[0:16]
-	encryptFileName = encryptFileName[16:]
-
-	result, err := AesCbcDecrypt(masterKey, iv, encryptFileName)
-	if err != nil {
-		return nil, err
-	}
-
-	return Pkcs5UnPadding(result), nil
-}
-
-func EncryptFileContent(masterKey, iv, content []byte) ([]byte, error) {
-	result, err := AesCtrEncrypt(masterKey, iv, content)
+func encryptFileContent(masterKey, iv, content []byte) ([]byte, error) {
+	result, err := aesCtrEncrypt(masterKey, iv, content)
 	if err != nil {
 		return nil, err
 	}
@@ -140,8 +114,8 @@ func EncryptFileContent(masterKey, iv, content []byte) ([]byte, error) {
 	return result, nil
 }
 
-func DecryptFileContent(masterKey, iv, encryptFileContent []byte) ([]byte, error) {
-	result, err := AesCtrDecrypt(masterKey, iv, encryptFileContent)
+func decryptFileContent(fileKey, iv, encryptFileContent []byte) ([]byte, error) {
+	result, err := aesCtrDecrypt(fileKey, iv, encryptFileContent)
 	if err != nil {
 		return nil, err
 	}

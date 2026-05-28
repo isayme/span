@@ -5,7 +5,7 @@ import (
 	"crypto/cipher"
 )
 
-func AesCtrEncrypt(key, iv []byte, plaintext []byte) ([]byte, error) {
+func aesCtrEncrypt(key, iv []byte, plaintext []byte) ([]byte, error) {
 	c, err := aes.NewCipher(key)
 	if err != nil {
 		return nil, err
@@ -20,7 +20,7 @@ func AesCtrEncrypt(key, iv []byte, plaintext []byte) ([]byte, error) {
 	return dst, nil
 }
 
-func AesCtrDecrypt(key, iv []byte, ciphertext []byte) ([]byte, error) {
+func aesCtrDecrypt(key, iv []byte, ciphertext []byte) ([]byte, error) {
 	c, err := aes.NewCipher(key)
 	if err != nil {
 		return nil, err

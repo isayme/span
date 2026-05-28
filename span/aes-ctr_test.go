@@ -19,14 +19,14 @@ func TestAesCtr(t *testing.T) {
 
 		{
 			// encrypt
-			ciphertext, err := AesCtrEncrypt(key, iv, []byte(plaintext))
+			ciphertext, err := aesCtrEncrypt(key, iv, []byte(plaintext))
 			require.Nil(err)
 			require.Equal(ciphertextInHex, hex.EncodeToString(ciphertext))
 		}
 
 		{
 			// decrypt
-			text, err := AesCtrDecrypt(key, iv, hexDecodeString(ciphertextInHex))
+			text, err := aesCtrDecrypt(key, iv, hexDecodeString(ciphertextInHex))
 			require.Nil(err)
 			require.Equal(plaintext, string(text))
 		}
@@ -38,14 +38,14 @@ func TestAesCtr(t *testing.T) {
 
 		{
 			// encrypt
-			ciphertext, err := AesCtrEncrypt(key, iv, []byte(plaintext))
+			ciphertext, err := aesCtrEncrypt(key, iv, []byte(plaintext))
 			require.Nil(err)
 			require.Equal(ciphertextInHex, hex.EncodeToString(ciphertext))
 		}
 
 		{
 			// decrypt
-			text, err := AesCtrDecrypt(key, iv, hexDecodeString(ciphertextInHex))
+			text, err := aesCtrDecrypt(key, iv, hexDecodeString(ciphertextInHex))
 			require.Nil(err)
 			require.Equal(plaintext, string(text))
 		}

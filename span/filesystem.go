@@ -30,11 +30,11 @@ func NewFileSystem(client *gowebdav.Client, masterKey []byte) webdav.FileSystem 
 func (fs *FileSystem) resolveName(name string) string {
 	names := bytes.Split([]byte(name), []byte("/"))
 
-	for idx, item := range names {
-		if len(item) > 0 {
-			names[idx] = []byte(Base64EncodeToString(MustEncryptFileName(fs.masterKey, item)))
-		}
-	}
+	// for idx, item := range names {
+	// 	if len(item) > 0 {
+	// 		names[idx] = []byte(Base64EncodeToString(MustEncryptFileName(fs.masterKey, item)))
+	// 	}
+	// }
 
 	return string(bytes.Join(names, []byte("/")))
 }

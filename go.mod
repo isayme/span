@@ -4,6 +4,8 @@ go 1.25.0
 
 require (
 	github.com/boltdb/bolt v1.3.1
+	github.com/go-chi/chi v1.5.5
+	github.com/go-chi/chi/v5 v5.3.0
 	github.com/isayme/go-bufferpool v0.1.0
 	github.com/isayme/go-config v0.3.0
 	github.com/isayme/go-logger v0.3.1

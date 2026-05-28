@@ -10,29 +10,42 @@ import (
 
 	"github.com/isayme/go-bufferpool"
 	"github.com/isayme/go-logger"
+	"golang.org/x/net/webdav"
 )
 
+var _ webdav.File = &WritableFile{}
+var _ fs.FileInfo = &WritableFile{}
+
 type WritableFile struct {
-	fs      *FileSystem
-	path    string
-	wc      io.WriteCloser
-	size    int64
+	fs   *FileSystem
+	path string
+
+	// 文件最终
+	wc io.WriteCloser
+	// 客户已Write的文件size
+	size int64
+	// 已加密写入的文件size
+	written int64
 	modTime time.Time
 
-	buffer                *bytes.Buffer
-	masterKey             []byte
-	fileKey               []byte
-	encryptFileKeyWritten bool
+	// 写文件临时缓冲区
+	buffer    *bytes.Buffer
+	masterKey []byte
+	fileKey   []byte
+	// file key 已写入标识
+	encryptedFileKeyWritten bool
 }
 
 func NewWritableFile(fs *FileSystem, masterKey []byte, path string) *WritableFile {
-	return &WritableFile{
+	file := &WritableFile{
 		fs:        fs,
 		path:      path,
 		buffer:    bytes.NewBuffer(nil),
-		fileKey:   mustRandomBytes(16),
+		fileKey:   mustRandomFileKey(),
 		masterKey: masterKey,
 	}
+	file.writeFileKey()
+	return file
 }
 
 func (file *WritableFile) Readdir(count int) ([]fs.FileInfo, error) {
@@ -57,9 +70,9 @@ func (file *WritableFile) Close() (err error) {
 
 		iv := bufferpool.Get(aesBlockSize)
 		defer bufferpool.Put(iv)
-		genIV(file.size, iv)
+		genIV(file.written, iv)
 
-		_, err = EncryptFileContent(file.fileKey, iv, buf)
+		_, err = encryptFileContent(file.fileKey, iv, buf)
 		if err != nil {
 			return
 		}
@@ -67,7 +80,7 @@ func (file *WritableFile) Close() (err error) {
 		if err != nil {
 			return
 		}
-		file.size = file.size + int64(n)
+		file.written = file.written + int64(n)
 	}
 
 	file.buffer.Reset()
@@ -107,7 +120,7 @@ func (file *WritableFile) writeFileKey() (err error) {
 		}
 	}()
 
-	if file.encryptFileKeyWritten {
+	if file.encryptedFileKeyWritten {
 		return nil
 	}
 
@@ -116,17 +129,17 @@ func (file *WritableFile) writeFileKey() (err error) {
 		return err
 	}
 
-	encryptFileKey, err := EncryptFileKey(file.masterKey, file.fileKey)
+	encryptedFileKey, err := encryptFileKey(file.masterKey, file.fileKey)
 	if err != nil {
 		return err
 	}
 
-	_, err = file.wc.Write(encryptFileKey)
+	_, err = file.wc.Write(encryptedFileKey)
 	if err != nil {
 		return err
 	}
 
-	file.encryptFileKeyWritten = true
+	file.encryptedFileKeyWritten = true
 	return nil
 }
 
@@ -146,6 +159,7 @@ func (file *WritableFile) Write(p []byte) (n int, err error) {
 	if err != nil {
 		return
 	}
+	file.size = file.size + int64(n)
 
 	file.modTime = time.Now()
 
@@ -158,9 +172,9 @@ func (file *WritableFile) Write(p []byte) (n int, err error) {
 	for file.buffer.Len() >= aesBlockSize {
 		file.buffer.Read(buf)
 
-		genIV(file.size, iv)
+		genIV(file.written, iv)
 
-		_, err := EncryptFileContent(file.fileKey, iv, buf)
+		_, err := encryptFileContent(file.fileKey, iv, buf)
 		if err != nil {
 			return 0, err
 		}
@@ -169,7 +183,7 @@ func (file *WritableFile) Write(p []byte) (n int, err error) {
 		if err != nil {
 			return 0, err
 		}
-		file.size = file.size + int64(aesBlockSize)
+		file.written = file.written + int64(aesBlockSize)
 	}
 
 	return
@@ -180,7 +194,7 @@ func (file *WritableFile) Name() string {
 }
 
 func (file *WritableFile) Size() int64 {
-	return file.size
+	return file.written
 }
 
 func (file *WritableFile) Mode() fs.FileMode {

@@ -9,7 +9,10 @@ import (
 
 	"github.com/isayme/go-bufferpool"
 	"github.com/isayme/go-logger"
+	"golang.org/x/net/webdav"
 )
+
+var _ webdav.File = &ReadableFile{}
 
 type ReadableFile struct {
 	fs   *FileSystem
@@ -23,12 +26,13 @@ type ReadableFile struct {
 }
 
 func NewReadableFile(fs *FileSystem, masterKey []byte, path string) *ReadableFile {
-	return &ReadableFile{
+	file := &ReadableFile{
 		fs:        fs,
 		path:      path,
 		masterKey: masterKey,
 		buffer:    bytes.NewBuffer(nil),
 	}
+	return file
 }
 
 func (file *ReadableFile) Readdir(count int) (fis []fs.FileInfo, err error) {
@@ -68,14 +72,14 @@ func (file *ReadableFile) readFileKey() (err error) {
 	}
 	defer rc.Close()
 
-	encryptFileKey := bufferpool.Get(fileKeySize)
-	defer bufferpool.Put(encryptFileKey)
-	_, err = io.ReadFull(rc, encryptFileKey)
+	encryptedFileKey := bufferpool.Get(fileKeySize)
+	defer bufferpool.Put(encryptedFileKey)
+	_, err = io.ReadFull(rc, encryptedFileKey)
 	if err != nil {
 		return err
 	}
 
-	fileKey, err := DecryptFileKey(file.masterKey, encryptFileKey)
+	fileKey, err := decryptFileKey(file.masterKey, encryptedFileKey)
 	if err != nil {
 		return err
 	}
@@ -123,7 +127,7 @@ func (file *ReadableFile) Read(p []byte) (n int, err error) {
 	iv := bufferpool.Get(aesBlockSize)
 	defer bufferpool.Put(iv)
 	genIV(file.pos, iv)
-	_, err = DecryptFileContent(file.fileKey, iv, buf[:nr])
+	_, err = decryptFileContent(file.fileKey, iv, buf[:nr])
 	if err != nil {
 		return
 	}

@@ -2,6 +2,7 @@ package span
 
 import "crypto/rand"
 
+// randomBytes generate random bytes with CSPRNG way.
 func randomBytes(n int) ([]byte, error) {
 	buf := make([]byte, n)
 	_, err := rand.Read(buf)

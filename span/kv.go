@@ -14,8 +14,8 @@ var dbFilePath = "span.db"
 
 const bucketNameSpan = "span"
 const bucketKeySalt = "salt"
-const bucketKeyEncryptMasterKey = "encryptMasterKey"
-const bucketKeyAuthKey = "authKey"
+const bucketKeyEncryptedMasterKey = "encryptedMasterKey"
+const bucketKeyHashedAuthKey = "hashedAuthKey"
 
 func openBolt() (*bolt.DB, error) {
 	db, err := bolt.Open(dbFilePath, dbFileMode, nil)
@@ -46,7 +46,7 @@ func InitBolt(path string) error {
 	return err
 }
 
-func ReadBolt() (salt, encryptMasterKey, authKey []byte, err error) {
+func ReadBolt() (salt, encryptedMasterKey, hashedAuthKey []byte, err error) {
 	db, err := openBolt()
 	if err != nil {
 		return nil, nil, nil, err
@@ -57,14 +57,14 @@ func ReadBolt() (salt, encryptMasterKey, authKey []byte, err error) {
 		b := tx.Bucket([]byte(bucketNameSpan))
 
 		salt = bytes.Clone(b.Get([]byte(bucketKeySalt)))
-		encryptMasterKey = bytes.Clone(b.Get([]byte(bucketKeyEncryptMasterKey)))
-		authKey = bytes.Clone(b.Get([]byte(bucketKeyAuthKey)))
+		encryptedMasterKey = bytes.Clone(b.Get([]byte(bucketKeyEncryptedMasterKey)))
+		hashedAuthKey = bytes.Clone(b.Get([]byte(bucketKeyHashedAuthKey)))
 		return nil
 	})
 	return
 }
 
-func WriteBolt(salt, encryptMasterKey, authKey []byte) error {
+func WriteBolt(salt, encryptedMasterKey, hashedAuthKey []byte) error {
 	db, err := openBolt()
 	if err != nil {
 		return err
@@ -79,13 +79,13 @@ func WriteBolt(salt, encryptMasterKey, authKey []byte) error {
 		if err != nil {
 			return errors.Wrapf(err, "写数据库失败, key: %s", bucketKeySalt)
 		}
-		err = b.Put([]byte(bucketKeyEncryptMasterKey), encryptMasterKey)
+		err = b.Put([]byte(bucketKeyEncryptedMasterKey), encryptedMasterKey)
 		if err != nil {
-			return errors.Wrapf(err, "写数据库失败, key: %s", bucketKeyEncryptMasterKey)
+			return errors.Wrapf(err, "写数据库失败, key: %s", bucketKeyEncryptedMasterKey)
 		}
-		err = b.Put([]byte(bucketKeyAuthKey), authKey)
+		err = b.Put([]byte(bucketKeyHashedAuthKey), hashedAuthKey)
 		if err != nil {
-			return errors.Wrapf(err, "写数据库失败, key: %s", bucketKeyAuthKey)
+			return errors.Wrapf(err, "写数据库失败, key: %s", bucketKeyHashedAuthKey)
 		}
 
 		return nil

@@ -37,13 +37,13 @@ password (user input)
        └─ authKey    (last 32B)   → stored in BoltDB for password verification
 ```
 
-- **Master key** (16B random) — encrypted with encryptKey via AES-ECB, stored as `encryptMasterKey` in BoltDB
+- **Master key** (16B random) — encrypted with encryptKey via AES-ECB, stored as `encryptedMasterKey` in BoltDB
 - **File name encryption**: AES-CBC(masterKey, iv=sha256(name)[:16]) + PKCS5 padding → base64url
   - Deterministic: same plaintext name always produces same ciphertext (enables rename/dedup by the upstream)
 - **File key** (16B random per file) — encrypted with masterKey via AES-ECB, prepended to upstream file content
 - **File content encryption**: AES-CTR(fileKey, iv=blockPos-based)
   - Different positions with same content produce different ciphertext
-  - Encrypted content on upstream = 16B encryptFileKey + encryptChunks...
+  - Encrypted content on upstream = 16B encryptedFileKey + encryptChunks...
   - Read on upstream: fileSize - 16 (strip the fileKey prefix)
 - Password strength checked with zxcvbn; score < 4 is rejected
 
@@ -52,9 +52,9 @@ password (user input)
 Single bucket `"span"` stores three keys:
 - `salt` — 16B random, generated on first login
 - `authKey` — PBKDF2-derived, used to verify password on subsequent logins
-- `encryptMasterKey` — masterKey encrypted with encryptKey
+- `encryptedMasterKey` — masterKey encrypted with encryptKey
 
-Flow: wrong password → authKey mismatch → reject. Correct password → derive encryptKey → decrypt encryptMasterKey → get masterKey.
+Flow: wrong password → authKey mismatch → reject. Correct password → derive encryptKey → decrypt encryptedMasterKey → get masterKey.
 
 ## Key quirks
 - Most log/error messages are in **Chinese**

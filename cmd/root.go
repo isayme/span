@@ -1,11 +1,13 @@
 package cmd
 
 import (
-	"encoding/hex"
+	"crypto/subtle"
 	"fmt"
 	"net/http"
 	"os"
 
+	"github.com/go-chi/chi/middleware"
+	"github.com/go-chi/chi/v5"
 	"github.com/isayme/go-logger"
 	"github.com/isayme/go-uuidv4"
 	"github.com/isayme/span/span"
@@ -67,29 +69,30 @@ var rootCmd = &cobra.Command{
 		}
 
 		var masterKey []byte
-		salt, encryptMasterKey, authKey, err := span.ReadBolt()
+		salt, encryptedMasterKey, hashedAuthKey, err := span.ReadBolt()
 		if err != nil {
 			logger.Panicf("读Bolt失败: %v", err)
 		}
 
-		if len(salt) > 0 && len(encryptMasterKey) > 0 && len(authKey) > 0 {
+		if len(salt) > 0 && len(encryptedMasterKey) > 0 && len(hashedAuthKey) > 0 {
 			logger.Debug("非首次登录")
 
-			encryptKey, expectAuthKey := span.GenEncryptKeyAndAuthKeyFromPassword(password, salt)
-			if hex.EncodeToString(authKey) != hex.EncodeToString(expectAuthKey) {
+			encryptKey, authKey := span.GenEncryptKeyAndAuthKeyFromPassword(password, salt)
+			if subtle.ConstantTimeCompare(span.HashAuthKey(authKey), hashedAuthKey) != 1 {
 				logger.Panic("密码不匹配")
 			}
 
-			masterKey = span.MustDecryptMasterKey(encryptKey, encryptMasterKey)
-		} else if len(salt) == 0 && len(encryptMasterKey) == 0 && len(authKey) == 0 {
+			// authorized, decrypt master key
+			masterKey = span.MustDecryptMasterKey(encryptKey, encryptedMasterKey)
+		} else if len(salt) == 0 && len(encryptedMasterKey) == 0 && len(hashedAuthKey) == 0 {
 			logger.Debug("首次登录")
 
 			salt = span.MustRandomSalt()
 			masterKey = span.MustRandomMasterKey()
 			encryptKey, authKey := span.GenEncryptKeyAndAuthKeyFromPassword(password, salt)
-			encryptMasterKey = span.MustEncryptMasterKey(encryptKey, masterKey)
+			encryptedMasterKey = span.MustEncryptMasterKey(encryptKey, masterKey)
 
-			span.WriteBolt(salt, encryptMasterKey, authKey)
+			span.WriteBolt(salt, encryptedMasterKey, span.HashAuthKey(authKey))
 		} else {
 			logger.Panic("Bolt数据异常")
 		}
@@ -107,20 +110,40 @@ var rootCmd = &cobra.Command{
 			},
 		}
 
-		err = http.ListenAndServe(addr, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// basic auth
-			webdavConfig := conf.Webdav
-			if webdavConfig.User != "" && webdavConfig.Password != "" {
-				username, password, ok := r.BasicAuth()
-				if !ok || webdavConfig.User != username || webdavConfig.Password != password {
-					w.WriteHeader(401)
-					w.Write([]byte("账号密码不匹配"))
-					return
-				}
-			}
+		webdavMethods := []string{
+			"GET",
+			"POST",
+			"PUT",
+			"DELETE",
+			"HEAD",
+			"OPTIONS",
+			"PROPFIND",
+			"PROPPATCH",
+			"MKCOL",
+			"COPY",
+			"MOVE",
+			"LOCK",
+			"UNLOCK",
+		}
 
-			webdavHandler.ServeHTTP(w, r)
-		}))
+		for _, method := range webdavMethods {
+			chi.RegisterMethod(method)
+		}
+		app := chi.NewRouter()
+
+		webdavConfig := conf.Webdav
+		if webdavConfig.User != "" && webdavConfig.Password != "" {
+			basicAuthCreds := map[string]string{
+				webdavConfig.User: webdavConfig.Password,
+			}
+			app.Use(middleware.BasicAuth(span.Name, basicAuthCreds))
+		}
+
+		for _, method := range webdavMethods {
+			app.Method(method, "/*", webdavHandler)
+		}
+
+		err = http.ListenAndServe(addr, app)
 		if err != nil {
 			logger.Errorf("启动服务失败: %v", err)
 		}

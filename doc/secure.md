@@ -7,7 +7,7 @@ encryptKey: pbkdf2(password, salt) 生成 64 字节的前 32 字节
 authKey: pbkdf2(password, salt) 生成 64 字节的后 32 字节
 
 masterKey: 主密码, 随机 16 字节。
-encryptMasterKey: aes-ecb 加解密 key: encryptKey
+encryptedMasterKey: aes-ecb 加解密 key: encryptKey
 加密后的主密码，存储在 db 中，即使 db 被他人获取，没有正确的 password 也无法获取到 masterKey
 
 fileKey: 随机 16 字节
@@ -16,31 +16,20 @@ fileKey: 随机 16 字节
 
 salt
 authKey
-encryptMasterKey
+encryptedMasterKey
 
 如果用户提供错误的 password，则无法计算比对出正确的 authKey，认证失败；
-如果用户提供正确的 password，则正常计算比对出 authKey，同时获得 encryptKey，随即可解密 encryptMasterKey 获得 masterKey；
+如果用户提供正确的 password，则正常计算比对出 authKey，同时获得 encryptKey，随即可解密 encryptedMasterKey 获得 masterKey；
 
-# 文件名称加密
-
-使用 aes-cbc (padding: Pkcs5) 加解密:
-key: 是 masterKey
-iv: sha256(fileName)[0:16]
-
-加密后的文件名 = iv + aes-cbc(key, iv, fileName)
-
-加密后特性：
-
--   同样的文件名加密后密文相同；（同名检测更方便）
--   不同的文件名不同的 iv；
+# 文件名称不加密
 
 # 文件内容加密
 
 fileKey = 随机 16 字节
 iv: 与当前写入的文件内容 pos 相关（这样同一个文件，即使是不同位置相同的文件内容加密后结果也不同）
-encryptFileKey = aes-ecb(masterKey, fileKey)
+encryptedFileKey = aes-ecb(masterKey, fileKey)
 encryptChunk = aes-ctr(fileKey, content, iv)
-加密后的文件内容 = encryptFileKey + encryptChunk ...
+加密后的文件内容 = encryptedFileKey + encryptChunk ...
 
 加密后特性
 
