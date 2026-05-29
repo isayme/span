@@ -1,19 +1,14 @@
-package span
+package utils
 
 import (
-	"crypto/aes"
 	"crypto/sha512"
 	"os"
+	"span/internal/constants"
 
 	"github.com/isayme/go-logger"
 	"golang.org/x/crypto/pbkdf2"
 	"golang.org/x/crypto/ssh/terminal"
 )
-
-const materKeySize = aes.BlockSize
-const saltSize = aes.BlockSize
-const fileKeySize = aes.BlockSize
-const ivSize = aes.BlockSize
 
 func ReadPassword(promt string) (string, error) {
 	logger.Info(promt)
@@ -27,12 +22,12 @@ func ReadPassword(promt string) (string, error) {
 
 // MustRandomMasterKey init random master key， 16bytes
 func MustRandomMasterKey() []byte {
-	return mustRandomBytes(materKeySize)
+	return mustRandomBytes(constants.MaterKeySize)
 }
 
 // MustRandomSalt init random salt， 16bytes
 func MustRandomSalt() []byte {
-	return mustRandomBytes(saltSize)
+	return mustRandomBytes(constants.SaltSize)
 }
 
 func GenEncryptKeyAndAuthKeyFromPassword(password string, salt []byte) (encryptKey, authKey []byte) {
@@ -85,10 +80,10 @@ func HashAuthKey(authKey []byte) []byte {
 }
 
 func randomFileKey() ([]byte, error) {
-	return randomBytes(fileKeySize)
+	return randomBytes(constants.FileKeySize)
 }
 
-func mustRandomFileKey() []byte {
+func MustRandomFileKey() []byte {
 	result, err := randomFileKey()
 	if err != nil {
 		panic(err)
@@ -97,15 +92,15 @@ func mustRandomFileKey() []byte {
 	return result
 }
 
-func encryptFileKey(masterKey, fileKey []byte) ([]byte, error) {
+func EncryptFileKey(masterKey, fileKey []byte) ([]byte, error) {
 	return AesEcbEncrypt(masterKey, fileKey)
 }
 
-func decryptFileKey(masterKey, encryptedFileKey []byte) ([]byte, error) {
+func DecryptFileKey(masterKey, encryptedFileKey []byte) ([]byte, error) {
 	return AesEcbDecrypt(masterKey, encryptedFileKey)
 }
 
-func encryptFileContent(masterKey, iv, content []byte) ([]byte, error) {
+func EncryptFileContent(masterKey, iv, content []byte) ([]byte, error) {
 	result, err := aesCtrEncrypt(masterKey, iv, content)
 	if err != nil {
 		return nil, err
@@ -114,7 +109,7 @@ func encryptFileContent(masterKey, iv, content []byte) ([]byte, error) {
 	return result, nil
 }
 
-func decryptFileContent(fileKey, iv, encryptFileContent []byte) ([]byte, error) {
+func DecryptFileContent(fileKey, iv, encryptFileContent []byte) ([]byte, error) {
 	result, err := aesCtrDecrypt(fileKey, iv, encryptFileContent)
 	if err != nil {
 		return nil, err

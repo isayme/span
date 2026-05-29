@@ -1,4 +1,4 @@
-package span
+package utils
 
 import (
 	"encoding/hex"
@@ -7,25 +7,23 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestAesCbc(t *testing.T) {
+func TestAesEcb(t *testing.T) {
 	require := require.New(t)
 
 	key := []byte("1234567890abcdef")
-	iv := []byte("1234567890abcdef")
-
 	plaintext := "abcdefghijklmnop"
-	ciphertextInHex := "f248daeace1898570bab65ee01db4f5c"
+	ciphertextInHex := "2ee0f95a8451707ab5b6e1166501cb1f"
 
 	{
 		// encrypt
-		ciphertext, err := AesCbcEncrypt(key, iv, []byte(plaintext))
+		ciphertext, err := AesEcbEncrypt(key, []byte(plaintext))
 		require.Nil(err)
 		require.Equal(ciphertextInHex, hex.EncodeToString(ciphertext))
 	}
 
 	{
 		// decrypt
-		text, err := AesCbcDecrypt(key, iv, hexDecodeString(ciphertextInHex))
+		text, err := AesEcbDecrypt(key, hexDecodeString(ciphertextInHex))
 		require.Nil(err)
 		require.Equal(plaintext, string(text))
 	}

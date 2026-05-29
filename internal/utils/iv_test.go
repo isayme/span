@@ -1,4 +1,4 @@
-package span
+package utils
 
 import (
 	"fmt"
@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestGenIv(t *testing.T) {
+func TestGenIV(t *testing.T) {
 	require := require.New(t)
 
 	testCases := []struct {
@@ -30,7 +30,7 @@ func TestGenIv(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("pos: %d", tc.pos), func(t *testing.T) {
 			buf := mustRandomBytes(16)
-			genIV(tc.pos, buf)
+			GenIV(tc.pos, buf)
 			require.Equal(tc.iv, buf)
 		})
 	}

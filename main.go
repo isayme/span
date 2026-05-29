@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/isayme/span/cmd"
+	"span/cmd"
 )
 
 func main() {

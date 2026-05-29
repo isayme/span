@@ -1,4 +1,4 @@
-package span
+package internal
 
 import "github.com/nbutton23/zxcvbn-go"
 

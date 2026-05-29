@@ -1,4 +1,4 @@
-module github.com/isayme/span
+module span
 
 go 1.25.0
 

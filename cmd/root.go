@@ -6,11 +6,13 @@ import (
 	"net/http"
 	"os"
 
+	"span/internal"
+	"span/internal/utils"
+
 	"github.com/go-chi/chi/middleware"
 	"github.com/go-chi/chi/v5"
 	"github.com/isayme/go-logger"
 	"github.com/isayme/go-uuidv4"
-	"github.com/isayme/span/span"
 	"github.com/spf13/cobra"
 	"github.com/studio-b12/gowebdav"
 	"golang.org/x/net/webdav"
@@ -32,15 +34,15 @@ var rootCmd = &cobra.Command{
 		var err error
 
 		if showVersion {
-			span.ShowVersion()
+			internal.ShowVersion()
 			os.Exit(0)
 		}
 
-		conf := span.GetConfig()
+		conf := internal.GetConfig()
 
 		upstreamWebdav := conf.Upstream.Webdav
 		webdavClient := gowebdav.NewClient(upstreamWebdav.Url, upstreamWebdav.User, upstreamWebdav.Password)
-		webdavClient.SetHeader("User-Agent", span.UserAgent)
+		webdavClient.SetHeader("User-Agent", internal.UserAgent)
 		webdavClient.SetInterceptor(func(method string, rq *http.Request) {
 			reqId, _ := uuidv4.Generate()
 			rq.Header.Set("x-request-id", reqId)
@@ -54,22 +56,22 @@ var rootCmd = &cobra.Command{
 
 		password := conf.Password
 		if password == "" {
-			password, err := span.ReadPassword("请输入密码:")
+			password, err := utils.ReadPassword("请输入密码:")
 			if err != nil {
 				logger.Panicf("读取密码失败: %v", err)
 			}
-			if span.IsPasswordTooWeak(password) {
+			if internal.IsPasswordTooWeak(password) {
 				logger.Panic("密码太弱")
 			}
 		}
 
-		err = span.InitBolt("")
+		err = utils.InitBolt("")
 		if err != nil {
 			logger.Panicf("初始化Bolt失败: %v", err)
 		}
 
 		var masterKey []byte
-		salt, encryptedMasterKey, hashedAuthKey, err := span.ReadBolt()
+		salt, encryptedMasterKey, hashedAuthKey, err := utils.ReadBolt()
 		if err != nil {
 			logger.Panicf("读Bolt失败: %v", err)
 		}
@@ -77,27 +79,27 @@ var rootCmd = &cobra.Command{
 		if len(salt) > 0 && len(encryptedMasterKey) > 0 && len(hashedAuthKey) > 0 {
 			logger.Debug("非首次登录")
 
-			encryptKey, authKey := span.GenEncryptKeyAndAuthKeyFromPassword(password, salt)
-			if subtle.ConstantTimeCompare(span.HashAuthKey(authKey), hashedAuthKey) != 1 {
+			encryptKey, authKey := utils.GenEncryptKeyAndAuthKeyFromPassword(password, salt)
+			if subtle.ConstantTimeCompare(utils.HashAuthKey(authKey), hashedAuthKey) != 1 {
 				logger.Panic("密码不匹配")
 			}
 
 			// authorized, decrypt master key
-			masterKey = span.MustDecryptMasterKey(encryptKey, encryptedMasterKey)
+			masterKey = utils.MustDecryptMasterKey(encryptKey, encryptedMasterKey)
 		} else if len(salt) == 0 && len(encryptedMasterKey) == 0 && len(hashedAuthKey) == 0 {
 			logger.Debug("首次登录")
 
-			salt = span.MustRandomSalt()
-			masterKey = span.MustRandomMasterKey()
-			encryptKey, authKey := span.GenEncryptKeyAndAuthKeyFromPassword(password, salt)
-			encryptedMasterKey = span.MustEncryptMasterKey(encryptKey, masterKey)
+			salt = utils.MustRandomSalt()
+			masterKey = utils.MustRandomMasterKey()
+			encryptKey, authKey := utils.GenEncryptKeyAndAuthKeyFromPassword(password, salt)
+			encryptedMasterKey = utils.MustEncryptMasterKey(encryptKey, masterKey)
 
-			span.WriteBolt(salt, encryptedMasterKey, span.HashAuthKey(authKey))
+			utils.WriteBolt(salt, encryptedMasterKey, utils.HashAuthKey(authKey))
 		} else {
 			logger.Panic("Bolt数据异常")
 		}
 
-		fs := span.NewFileSystem(webdavClient, masterKey)
+		fs := internal.NewFileSystem(webdavClient, masterKey)
 		addr := fmt.Sprintf(":%d", listenPort)
 		logger.Infof("服务已启动, 端口: %d ", listenPort)
 
@@ -136,7 +138,7 @@ var rootCmd = &cobra.Command{
 			basicAuthCreds := map[string]string{
 				webdavConfig.User: webdavConfig.Password,
 			}
-			app.Use(middleware.BasicAuth(span.Name, basicAuthCreds))
+			app.Use(middleware.BasicAuth(internal.Name, basicAuthCreds))
 		}
 
 		for _, method := range webdavMethods {

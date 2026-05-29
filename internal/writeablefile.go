@@ -1,4 +1,4 @@
-package span
+package internal
 
 import (
 	"bytes"
@@ -6,6 +6,8 @@ import (
 	"io"
 	"io/fs"
 	"path"
+	"span/internal/constants"
+	"span/internal/utils"
 	"time"
 
 	"github.com/isayme/go-bufferpool"
@@ -44,7 +46,7 @@ func NewWritableFile(fs *FileSystem, masterKey []byte, path string) *WritableFil
 		fs:              fs,
 		path:            path,
 		buffer:          bytes.NewBuffer(nil),
-		fileKey:         mustRandomFileKey(),
+		fileKey:         utils.MustRandomFileKey(),
 		masterKey:       masterKey,
 		upstreamPutDone: make(chan error, 1),
 	}
@@ -68,15 +70,15 @@ func (file *WritableFile) Close() (err error) {
 	}()
 
 	if file.buffer.Len() > 0 {
-		buf := bufferpool.Get(aesBlockSize)
+		buf := bufferpool.Get(constants.AesBlockSize)
 		defer bufferpool.Put(buf)
 		n, _ := file.buffer.Read(buf)
 
-		iv := bufferpool.Get(aesBlockSize)
+		iv := bufferpool.Get(constants.AesBlockSize)
 		defer bufferpool.Put(iv)
-		genIV(file.written, iv)
+		utils.GenIV(file.written, iv)
 
-		_, err = encryptFileContent(file.fileKey, iv, buf)
+		_, err = utils.EncryptFileContent(file.fileKey, iv, buf)
 		if err != nil {
 			return
 		}
@@ -146,7 +148,7 @@ func (file *WritableFile) writeFileKey() (err error) {
 		return err
 	}
 
-	encryptedFileKey, err := encryptFileKey(file.masterKey, file.fileKey)
+	encryptedFileKey, err := utils.EncryptFileKey(file.masterKey, file.fileKey)
 	if err != nil {
 		return err
 	}
@@ -180,18 +182,18 @@ func (file *WritableFile) Write(p []byte) (n int, err error) {
 
 	file.modTime = time.Now()
 
-	iv := bufferpool.Get(aesBlockSize)
+	iv := bufferpool.Get(constants.AesBlockSize)
 	defer bufferpool.Put(iv)
 
-	buf := bufferpool.Get(aesBlockSize)
+	buf := bufferpool.Get(constants.AesBlockSize)
 	defer bufferpool.Put(buf)
 
-	for file.buffer.Len() >= aesBlockSize {
+	for file.buffer.Len() >= constants.AesBlockSize {
 		file.buffer.Read(buf)
 
-		genIV(file.written, iv)
+		utils.GenIV(file.written, iv)
 
-		_, err := encryptFileContent(file.fileKey, iv, buf)
+		_, err := utils.EncryptFileContent(file.fileKey, iv, buf)
 		if err != nil {
 			return 0, err
 		}
@@ -200,7 +202,7 @@ func (file *WritableFile) Write(p []byte) (n int, err error) {
 		if err != nil {
 			return 0, err
 		}
-		file.written = file.written + int64(aesBlockSize)
+		file.written = file.written + int64(constants.AesBlockSize)
 	}
 
 	return

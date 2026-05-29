@@ -1,14 +1,12 @@
-package span
+package utils
 
 import (
 	"bytes"
-	"crypto/aes"
+	"span/internal/constants"
 )
 
-var aesBlockSize = aes.BlockSize
-
 func Pkcs5Padding(b []byte) []byte {
-	padSize := aesBlockSize - len(b)%aesBlockSize
+	padSize := constants.AesBlockSize - len(b)%constants.AesBlockSize
 	padding := bytes.Repeat([]byte{byte(padSize)}, padSize)
 	return append(b, padding...)
 }

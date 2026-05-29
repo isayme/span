@@ -8,8 +8,8 @@ ENV APP_VERSION ${APP_VERSION}
 
 COPY . .
 RUN mkdir -p ./dist && GO111MODULE=on go mod download
-RUN go build -ldflags "-X github.com/isayme/span.Name=${APP_NAME} \
-    -X github.com/isayme/span.Version=${APP_VERSION}" \
+RUN go build -ldflags "-X span.internal.Name=${APP_NAME} \
+    -X span.internal.Version=${APP_VERSION}" \
     -o ./dist/span main.go
 
 FROM alpine

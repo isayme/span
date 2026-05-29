@@ -9,10 +9,11 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"span/internal"
+	"span/internal/utils"
 	"testing"
 
 	"github.com/isayme/go-logger"
-	"github.com/isayme/span/span"
 	"github.com/stretchr/testify/require"
 	"github.com/studio-b12/gowebdav"
 	"golang.org/x/net/webdav"
@@ -51,28 +52,28 @@ func TestE2E(t *testing.T) {
 	// --- span server ---
 	password := "this-is-a-strong-password-that-passes-zxcvbn-1234567890!" + randomString(10)
 
-	boltPath := filepath.Join(spanDir, "span.db")
-	require.NoError(t, span.InitBolt(boltPath))
+	boltPath := filepath.Join(spanDir, "intertnal.db")
+	require.NoError(t, utils.InitBolt(boltPath))
 
-	salt := span.MustRandomSalt()
-	masterKey := span.MustRandomMasterKey()
-	encryptKey, authKey := span.GenEncryptKeyAndAuthKeyFromPassword(password, salt)
-	encryptedMasterKey := span.MustEncryptMasterKey(encryptKey, masterKey)
-	require.NoError(t, span.WriteBolt(salt, encryptedMasterKey, span.HashAuthKey(authKey)))
+	salt := utils.MustRandomSalt()
+	masterKey := utils.MustRandomMasterKey()
+	encryptKey, authKey := utils.GenEncryptKeyAndAuthKeyFromPassword(password, salt)
+	encryptedMasterKey := utils.MustEncryptMasterKey(encryptKey, masterKey)
+	require.NoError(t, utils.WriteBolt(salt, encryptedMasterKey, utils.HashAuthKey(authKey)))
 
 	// Verify auth (simulate second login)
-	readSalt, readEMK, readHAK, err := span.ReadBolt()
+	readSalt, readEMK, readHAK, err := utils.ReadBolt()
 	require.NoError(t, err)
-	reEncryptKey, reAuthKey := span.GenEncryptKeyAndAuthKeyFromPassword(password, readSalt)
-	require.Equal(t, span.HashAuthKey(reAuthKey), readHAK)
-	reMasterKey := span.MustDecryptMasterKey(reEncryptKey, readEMK)
+	reEncryptKey, reAuthKey := utils.GenEncryptKeyAndAuthKeyFromPassword(password, readSalt)
+	require.Equal(t, utils.HashAuthKey(reAuthKey), readHAK)
+	reMasterKey := utils.MustDecryptMasterKey(reEncryptKey, readEMK)
 	require.Equal(t, masterKey, reMasterKey)
 
 	upstreamClient := gowebdav.NewClient("http://"+upstreamAddr, "", "")
-	upstreamClient.SetHeader("User-Agent", span.UserAgent)
+	upstreamClient.SetHeader("User-Agent", internal.UserAgent)
 	require.NoError(t, upstreamClient.Connect())
 
-	fs := span.NewFileSystem(upstreamClient, masterKey)
+	fs := internal.NewFileSystem(upstreamClient, masterKey)
 	spanHandler := &webdav.Handler{
 		FileSystem: fs,
 		LockSystem: webdav.NewMemLS(),

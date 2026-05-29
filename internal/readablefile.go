@@ -1,4 +1,4 @@
-package span
+package internal
 
 import (
 	"bytes"
@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"span/internal/constants"
+	"span/internal/utils"
 
 	"github.com/isayme/go-bufferpool"
 	"github.com/isayme/go-logger"
@@ -67,20 +69,20 @@ func (file *ReadableFile) readFileKey() (err error) {
 		return nil
 	}
 
-	rc, err := file.fs.client.ReadStreamRange(file.fs.resolveName(file.path), 0, fileKeySize)
+	rc, err := file.fs.client.ReadStreamRange(file.fs.resolveName(file.path), 0, constants.FileKeySize)
 	if err != nil {
 		return err
 	}
 	defer rc.Close()
 
-	encryptedFileKey := bufferpool.Get(fileKeySize)
+	encryptedFileKey := bufferpool.Get(constants.FileKeySize)
 	defer bufferpool.Put(encryptedFileKey)
 	_, err = io.ReadFull(rc, encryptedFileKey)
 	if err != nil {
 		return err
 	}
 
-	fileKey, err := decryptFileKey(file.masterKey, encryptedFileKey)
+	fileKey, err := utils.DecryptFileKey(file.masterKey, encryptedFileKey)
 	if err != nil {
 		return err
 	}
@@ -93,7 +95,7 @@ func (file *ReadableFile) ensureRc() (err error) {
 		return
 	}
 
-	file.rc, err = file.fs.client.ReadStreamRange(file.fs.resolveName(file.path), file.pos+fileKeySize, 0)
+	file.rc, err = file.fs.client.ReadStreamRange(file.fs.resolveName(file.path), file.pos+constants.FileKeySize, 0)
 	return err
 }
 
@@ -118,17 +120,17 @@ func (file *ReadableFile) Read(p []byte) (n int, err error) {
 		return file.buffer.Read(p)
 	}
 
-	buf := bufferpool.Get(aesBlockSize)
+	buf := bufferpool.Get(constants.AesBlockSize)
 	defer bufferpool.Put(buf)
 	nr, err := io.ReadFull(file.rc, buf)
 	if err == io.EOF {
 		return
 	}
 
-	iv := bufferpool.Get(aesBlockSize)
+	iv := bufferpool.Get(constants.AesBlockSize)
 	defer bufferpool.Put(iv)
-	genIV(file.pos, iv)
-	_, err = decryptFileContent(file.fileKey, iv, buf[:nr])
+	utils.GenIV(file.pos, iv)
+	_, err = utils.DecryptFileContent(file.fileKey, iv, buf[:nr])
 	if err != nil {
 		return
 	}
