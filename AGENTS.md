@@ -14,7 +14,7 @@ go run main.go -p 8080 -l info -v   # standalone
 ```
 
 - Config via `CONF_FILE_PATH` env var (YAML). `config/*` is gitignored; `config/dev.yaml` is example.
-- Version set via `-ldflags "-X github.com/isayme/span/span.Version=x"` at build time.
+- Version set via `-ldflags "-X span/internal.Version=x"` at build time.
 
 ## Entrypoints & boundaries
 
@@ -22,11 +22,11 @@ go run main.go -p 8080 -l info -v   # standalone
 |------|------|
 | `main.go` → `cmd.Execute()` | CLI entry (cobra) |
 | `cmd/root.go` | Wires everything: flags, config, password, master key init, BoltDB, WebDAV server |
-| `span/filesystem.go` | `webdav.FileSystem` impl — proxies all ops, encrypting/decrypting names via `resolveName()` |
-| `span/password.go` | PBKDF2 key derivation, masterKey encrypt/decrypt, fileKey ops |
-| `span/fileinfo.go` | Decrypts file names in directory listings via `NewFileInfo()` |
-| `span/readablefile.go` | On read: fetches encrypted fileKey, decrypts it with masterKey, then decrypts content blocks with AES-CTR |
-| `span/writeablefile.go` | On write: generates random fileKey, encrypts content with AES-CTR, prepends encrypted fileKey to upstream stream |
+| `internal/filesystem.go` | `webdav.FileSystem` impl — proxies all ops, encrypting/decrypting names via `resolveName()` |
+| `internal/utils/password.go` | PBKDF2 key derivation, masterKey encrypt/decrypt, fileKey ops |
+| `internal/fileinfo.go` | Decrypts file names in directory listings via `NewFileInfo()` |
+| `internal/readablefile.go` | On read: fetches encrypted fileKey, decrypts it with masterKey, then decrypts content blocks with AES-CTR |
+| `internal/writeablefile.go` | On write: generates random fileKey, encrypts content with AES-CTR, prepends encrypted fileKey to upstream stream |
 
 ## Encryption model (see also `doc/secure.md`)
 
@@ -64,3 +64,33 @@ Flow: wrong password → authKey mismatch → reject. Correct password → deriv
 - Three AES modes used: ECB for key encryption (no IV needed), CBC for filenames (deterministic IV), CTR for content (position-based IV)
 - Buffer management via `github.com/isayme/go-bufferpool`
 - User-Agent header set to `span/version` on upstream WebDAV requests
+
+## Package layout
+
+```
+internal/            # Core logic
+  conf.go            # Config struct
+  fileinfo.go        # File name decryption in directory listings
+  filesystem.go      # webdav.FileSystem impl
+  readablefile.go    # Read path: decrypt content with AES-CTR
+  writeablefile.go   # Write path: encrypt content with AES-CTR
+  ua.go              # User-Agent header
+  version.go         # Build version
+  zxcvbn.go          # Password strength checker
+  constants/         # Shared constants
+  config/            # Embedded config assets
+  utils/             # Utility packages
+    aes-cbc.go       # AES-CBC for file names
+    aes-ctr.go       # AES-CTR for file content
+    aes-ecb.go       # AES-ECB for key encryption
+    aes-gcm.go       # AES-GCM (available for future use)
+    aes-padding.go   # PKCS5 padding
+    base64.go        # URL-safe base64
+    hash.go          # SHA-256 helpers
+    iv.go            # IV derivation (block-position based)
+    kv.go            # Key-value helpers
+    password.go      # PBKDF2 key derivation, masterKey/fileKey ops
+    rand.go          # Crypto-random helpers
+e2e/                 # End-to-end test
+cmd/                 # CLI (cobra)
+```
