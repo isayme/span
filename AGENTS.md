@@ -74,6 +74,8 @@ internal/            # Core logic
   filesystem.go      # webdav.FileSystem impl
   readablefile.go    # Read path: decrypt content with AES-CTR
   writeablefile.go   # Write path: encrypt content with AES-CTR
+  contentcipher.go   # ContentCipher interface (abstraction for file content cipher)
+  aesctrcipher.go    # Default AES-CTR ContentCipher implementation
   ua.go              # User-Agent header
   version.go         # Build version
   zxcvbn.go          # Password strength checker

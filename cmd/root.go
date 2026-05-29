@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"span/internal"
+	"span/internal/config"
 	"span/internal/utils"
 
 	"github.com/go-chi/chi/middleware"
@@ -38,7 +39,7 @@ var rootCmd = &cobra.Command{
 			os.Exit(0)
 		}
 
-		conf := internal.GetConfig()
+		conf := config.GetConfig()
 
 		upstreamWebdav := conf.Upstream.Webdav
 		webdavClient := gowebdav.NewClient(upstreamWebdav.Url, upstreamWebdav.User, upstreamWebdav.Password)

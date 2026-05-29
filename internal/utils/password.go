@@ -79,12 +79,12 @@ func HashAuthKey(authKey []byte) []byte {
 	return Sha256(authKey)
 }
 
-func randomFileKey() ([]byte, error) {
+func RandomFileKey() ([]byte, error) {
 	return randomBytes(constants.FileKeySize)
 }
 
 func MustRandomFileKey() []byte {
-	result, err := randomFileKey()
+	result, err := RandomFileKey()
 	if err != nil {
 		panic(err)
 	}
