@@ -140,6 +140,9 @@ func (f *encryptFile) Seek(offset int64, whence int) (int64, error) {
 		return 0, nil
 	}
 
+	if newOffset != f.readPos {
+		f.readBuffer.Reset()
+	}
 	f.readPos = newOffset
 	return newOffset, err
 }
