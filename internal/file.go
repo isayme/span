@@ -90,6 +90,18 @@ func (f *encryptFile) Read(p []byte) (n int, err error) {
 		return
 	}
 
+	// Decrypt must operate on AES block boundaries. If readPos is not
+	// block-aligned, seek back to the start of the containing block first.
+	blockStart := f.readPos / constants.AesBlockSize * constants.AesBlockSize
+	skip := int(f.readPos - blockStart)
+
+	if skip > 0 {
+		_, err = f.File.Seek(blockStart+constants.FileKeySize, io.SeekStart)
+		if err != nil {
+			return
+		}
+	}
+
 	buf := bufferpool.Get(constants.AesBlockSize)
 	defer bufferpool.Put(buf)
 	nr, err := io.ReadFull(f.File, buf)
@@ -99,14 +111,20 @@ func (f *encryptFile) Read(p []byte) (n int, err error) {
 
 	iv := bufferpool.Get(constants.AesBlockSize)
 	defer bufferpool.Put(iv)
-	utils.GenIV(f.readPos, iv)
+	utils.GenIV(blockStart, iv)
 	_, err = utils.DecryptFileContent(f.fileKey, iv, buf[:nr])
 	if err != nil {
 		return
 	}
 
-	f.readPos = f.readPos + int64(nr)
-	f.readBuffer.Write(buf[:nr])
+	// Remove the prefix that the caller has already consumed.
+	if skip >= nr {
+		return 0, io.EOF
+	}
+	data := buf[skip:nr]
+
+	f.readPos = f.readPos + int64(len(data))
+	f.readBuffer.Write(data)
 
 	return f.readBuffer.Read(p)
 }
