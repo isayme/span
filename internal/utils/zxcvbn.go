@@ -1,4 +1,4 @@
-package internal
+package utils
 
 import "github.com/nbutton23/zxcvbn-go"
 

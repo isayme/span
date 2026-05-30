@@ -63,7 +63,7 @@ var rootCmd = &cobra.Command{
 			if err != nil {
 				logger.Panicf("读取密码失败: %v", err)
 			}
-			if internal.IsPasswordTooWeak(password) {
+			if utils.IsPasswordTooWeak(password) {
 				logger.Panic("密码太弱")
 			}
 		}

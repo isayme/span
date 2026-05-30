@@ -119,6 +119,30 @@ func logAferoOp(op, name string, err error) {
 	}
 }
 
+// runWithContext runs fn in a goroutine and returns its result, or ctx.Err()
+// if the context is cancelled before fn completes.
+func runWithContext[T any](ctx context.Context, fn func() (T, error)) (T, error) {
+	type result struct {
+		val T
+		err error
+	}
+
+	ch := make(chan result, 1)
+	go func() {
+		var r result
+		r.val, r.err = fn()
+		ch <- r
+	}()
+
+	select {
+	case r := <-ch:
+		return r.val, r.err
+	case <-ctx.Done():
+		var zero T
+		return zero, ctx.Err()
+	}
+}
+
 // webdavFS implements webdav.FileSystem, delegating to an underlying afero.Fs
 // with context-aware logging. This is a separate type because afero.Fs and
 // webdav.FileSystem have conflicting method signatures (Mkdir, OpenFile, etc.).
@@ -138,7 +162,10 @@ func NewWebdavFileSystem(fs afero.Fs) webdav.FileSystem {
 // --- webdav.FileSystem ---
 
 func (w *webdavFS) Mkdir(ctx context.Context, name string, perm os.FileMode) (err error) {
-	return w.fs.Mkdir(name, perm)
+	_, err = runWithContext(ctx, func() (struct{}, error) {
+		return struct{}{}, w.fs.Mkdir(name, perm)
+	})
+	return
 }
 
 func (w *webdavFS) OpenFile(ctx context.Context, name string, flag int, perm os.FileMode) (result webdav.File, err error) {
@@ -154,20 +181,32 @@ func (w *webdavFS) OpenFile(ctx context.Context, name string, flag int, perm os.
 	// Pre-create the file via Create() (which writes an empty file synchronously)
 	// so that the subsequent Stat() succeeds.
 	if flag&(os.O_WRONLY|os.O_CREATE) != 0 {
-		return w.fs.Create(name)
+		return runWithContext(ctx, func() (webdav.File, error) {
+			return w.fs.Create(name)
+		})
 	}
 
-	return w.fs.OpenFile(name, flag, perm)
+	return runWithContext(ctx, func() (webdav.File, error) {
+		return w.fs.OpenFile(name, flag, perm)
+	})
 }
 
 func (w *webdavFS) RemoveAll(ctx context.Context, name string) (err error) {
-	return w.fs.RemoveAll(name)
+	_, err = runWithContext(ctx, func() (struct{}, error) {
+		return struct{}{}, w.fs.RemoveAll(name)
+	})
+	return
 }
 
 func (w *webdavFS) Rename(ctx context.Context, oldName, newName string) (err error) {
-	return w.fs.Rename(oldName, newName)
+	_, err = runWithContext(ctx, func() (struct{}, error) {
+		return struct{}{}, w.fs.Rename(oldName, newName)
+	})
+	return
 }
 
 func (w *webdavFS) Stat(ctx context.Context, name string) (fi os.FileInfo, err error) {
-	return w.fs.Stat(name)
+	return runWithContext(ctx, func() (os.FileInfo, error) {
+		return w.fs.Stat(name)
+	})
 }
