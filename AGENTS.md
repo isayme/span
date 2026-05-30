@@ -1,7 +1,7 @@
 # span — Agent Guide
 
 ## What it is
-Encrypted WebDAV proxy (`secure pan`). Go 1.20. Wraps an upstream WebDAV service (Alist/AliYunDrive/etc.), encrypting all file **names** (AES-CBC) and file **content** (AES-CTR) before storing upstream. Local WebDAV server decrypts transparently on read.
+Encrypted WebDAV proxy (`secure pan`). Wraps an upstream WebDAV service (Alist/AliYunDrive/etc.), encrypting all file **names** (AES-CBC) and file **content** (AES-CTR) before storing upstream. Local WebDAV server decrypts transparently on read.
 
 ## References
 Security design doc: `doc/secure.md` (Chinese). Consult it when modifying crypto code.
@@ -22,11 +22,8 @@ go run main.go -p 8080 -l info -v   # standalone
 |------|------|
 | `main.go` → `cmd.Execute()` | CLI entry (cobra) |
 | `cmd/root.go` | Wires everything: flags, config, password, master key init, BoltDB, WebDAV server |
-| `internal/filesystem.go` | `webdav.FileSystem` impl — proxies all ops, encrypting/decrypting names via `resolveName()` |
+| `internal/filesystem.go` | Implements both `afero.Fs` (via `FileSystem`) and `webdav.FileSystem` (via `webdavFS`). Delegates to underlying `afero.Fs` (backed by `github.com/isayme/afero-webdav`). All methods use `defer` for access logging. |
 | `internal/utils/password.go` | PBKDF2 key derivation, masterKey encrypt/decrypt, fileKey ops |
-| `internal/fileinfo.go` | Decrypts file names in directory listings via `NewFileInfo()` |
-| `internal/readablefile.go` | On read: fetches encrypted fileKey, decrypts it with masterKey, then decrypts content blocks with AES-CTR |
-| `internal/writeablefile.go` | On write: generates random fileKey, encrypts content with AES-CTR, prepends encrypted fileKey to upstream stream |
 
 ## Encryption model (see also `doc/secure.md`)
 
@@ -59,10 +56,8 @@ Flow: wrong password → authKey mismatch → reject. Correct password → deriv
 ## Key quirks
 - Most log/error messages are in **Chinese**
 - `Must*` functions panic on error (e.g., `MustEncryptFileName`, `MustRandomMasterKey`)
-- Tests use `github.com/stretchr/testify/require` in **same package** (not `_test`)
-- Files on upstream are prefixed with encrypted fileKey; reads subtract 16 bytes from upstream size
+- Filesystem layer now uses `github.com/isayme/afero-webdav` (WebDAV-backed `afero.Fs`) instead of manual encryption in `fs.go`/`file.go`. Old `fileinfo.go`, `readablefile.go`, `writeablefile.go` have been deleted.
 - Three AES modes used: ECB for key encryption (no IV needed), CBC for filenames (deterministic IV), CTR for content (position-based IV)
-- Buffer management via `github.com/isayme/go-bufferpool`
 - User-Agent header set to `span/version` on upstream WebDAV requests
 
 ## Package layout
@@ -70,12 +65,7 @@ Flow: wrong password → authKey mismatch → reject. Correct password → deriv
 ```
 internal/            # Core logic
   conf.go            # Config struct
-  fileinfo.go        # File name decryption in directory listings
-  filesystem.go      # webdav.FileSystem impl
-  readablefile.go    # Read path: decrypt content with AES-CTR
-  writeablefile.go   # Write path: encrypt content with AES-CTR
-  contentcipher.go   # ContentCipher interface (abstraction for file content cipher)
-  aesctrcipher.go    # Default AES-CTR ContentCipher implementation
+  filesystem.go      # afero.Fs + webdav.FileSystem impl (delegates to afero-webdav)
   ua.go              # User-Agent header
   version.go         # Build version
   zxcvbn.go          # Password strength checker

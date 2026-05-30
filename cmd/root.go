@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 
 	"span/internal"
 	"span/internal/config"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/go-chi/chi/middleware"
 	"github.com/go-chi/chi/v5"
+	webdavfs "github.com/isayme/afero-webdav"
 	"github.com/isayme/go-logger"
 	"github.com/isayme/go-uuidv4"
 	"github.com/spf13/cobra"
@@ -100,7 +102,7 @@ var rootCmd = &cobra.Command{
 			logger.Panic("Bolt数据异常")
 		}
 
-		fs := internal.NewFileSystem(webdavClient, masterKey)
+		fs := internal.NewWebdavFileSystem(internal.NewEncrytFileSystem(webdavfs.New(webdavClient), masterKey))
 		addr := fmt.Sprintf(":%d", listenPort)
 		logger.Infof("服务已启动, 端口: %d ", listenPort)
 
@@ -142,8 +144,12 @@ var rootCmd = &cobra.Command{
 			app.Use(middleware.BasicAuth(internal.Name, basicAuthCreds))
 		}
 
+		pattern := "/*"
+		if webdavConfig.Prefix == "" {
+			pattern = fmt.Sprintf("%s/*", strings.TrimRight(webdavConfig.Prefix, "/"))
+		}
 		for _, method := range webdavMethods {
-			app.Method(method, "/*", webdavHandler)
+			app.Method(method, pattern, webdavHandler)
 		}
 
 		err = http.ListenAndServe(addr, app)

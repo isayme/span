@@ -1,151 +1,173 @@
 package internal
 
 import (
-	"bytes"
 	"context"
-	"io/fs"
 	"os"
+	"time"
 
 	"github.com/isayme/go-logger"
-	"github.com/pkg/errors"
-	"github.com/studio-b12/gowebdav"
+	"github.com/spf13/afero"
 	"golang.org/x/net/webdav"
 )
 
-var _ webdav.FileSystem = &FileSystem{}
-
-type FileSystem struct {
-	client *gowebdav.Client
-
+// EncryptFileSystem implements afero.Fs, delegating to an underlying afero.Fs.
+type EncryptFileSystem struct {
+	fs        afero.Fs
 	masterKey []byte
 }
 
-func NewFileSystem(client *gowebdav.Client, masterKey []byte) webdav.FileSystem {
-	return &FileSystem{
-		client:    client,
+var _ afero.Fs = &EncryptFileSystem{}
+
+func NewEncrytFileSystem(fs afero.Fs, masterKey []byte) *EncryptFileSystem {
+	return &EncryptFileSystem{
+		fs:        fs,
 		masterKey: masterKey,
 	}
 }
 
-func (fs *FileSystem) resolveName(name string) string {
-	names := bytes.Split([]byte(name), []byte("/"))
+// --- afero.Fs (all methods) ---
 
-	// for idx, item := range names {
-	// 	if len(item) > 0 {
-	// 		names[idx] = []byte(Base64EncodeToString(MustEncryptFileName(fs.masterKey, item)))
-	// 	}
-	// }
-
-	return string(bytes.Join(names, []byte("/")))
-}
-
-func (fs *FileSystem) Mkdir(ctx context.Context, name string, perm os.FileMode) (err error) {
-	defer func() {
-		if err != nil {
-			logger.Errorf("新建文件夹 '%s' 失败: %v", name, err)
-		} else {
-			logger.Infof("新建文件夹 '%s' 成功, perm: %v", name, perm.String())
-		}
-	}()
-
-	return fs.client.Mkdir(fs.resolveName(name), perm)
-}
-
-func (fs *FileSystem) OpenFile(ctx context.Context, name string, flag int, perm os.FileMode) (result webdav.File, err error) {
-	defer func() {
-		if err != nil {
-			logger.Errorf("打开文件 '%s' 失败, flag: %x, perm: %s, err: %v", name, flag, perm.String(), err)
-		} else {
-			logger.Infof("打开文件 '%s' 成功, flag: %x, perm: %s", name, flag, perm.String())
-		}
-	}()
-
-	if flag&(os.O_SYNC|os.O_APPEND) > 0 {
-		return nil, os.ErrInvalid
-	}
-
-	if flag&os.O_TRUNC > 0 {
-		err := fs.RemoveAll(ctx, name)
-		if err != nil {
-			if !gowebdav.IsErrNotFound(err) {
-				return nil, errors.Wrap(err, "删除源文件失败")
-			}
-		}
-	}
-
-	if flag&os.O_CREATE > 0 {
-		return NewWritableFile(fs, fs.masterKey, name), nil
-	} else {
-		return NewReadableFile(fs, fs.masterKey, name), nil
-	}
-}
-
-func (fs *FileSystem) RemoveAll(ctx context.Context, name string) (err error) {
-	defer func() {
-		if err != nil {
-			logger.Errorf("删除文件 '%s' 失败: %v", name, err)
-		} else {
-			logger.Infof("删除文件 '%s' 成功", name)
-		}
-	}()
-
-	return fs.client.RemoveAll(fs.resolveName(name))
-}
-
-func (fs *FileSystem) Rename(ctx context.Context, oldName, newName string) (err error) {
-	defer func() {
-		if err != nil {
-			logger.Errorf("移动文件 '%s' 到 '%s' 失败: %v", oldName, newName, err)
-		} else {
-			logger.Infof("移动文件 '%s' 到 '%s' 成功", oldName, newName)
-		}
-	}()
-
-	return fs.client.Rename(fs.resolveName(oldName), fs.resolveName(newName), true)
-}
-
-func (fs *FileSystem) Stat(ctx context.Context, name string) (fi os.FileInfo, err error) {
-	defer func() {
-		if err == nil {
-			logger.Infof("查看文件 '%s' 信息成功, IsDir(): %v, name: %v, mod %v", name, fi.IsDir(), fi.Name(), fi.Mode())
-		} else if err == os.ErrNotExist {
-			logger.Infof("查看文件 '%s' 信息成功: 文件不存在", name)
-		} else {
-			logger.Errorf("查看文件 '%s' 信息失败: %v", name, err)
-		}
-	}()
-
-	fi, err = fs.client.Stat(fs.resolveName(name))
-	if err != nil && gowebdav.IsErrNotFound(err) {
-		err = os.ErrNotExist
-	}
-
+func (fs *EncryptFileSystem) Create(name string) (result afero.File, err error) {
+	defer func() { logAferoOp("Create", name, err) }()
+	file, err := fs.fs.Create(name)
 	if err != nil {
-		fi = nil
-		return
+		return nil, err
 	}
-
-	if name == "/" {
-		return
-	}
-
-	fi = NewFileInfo(fs.masterKey, fi)
-	return
+	return NewEncryptFile(file, fs.masterKey), nil
 }
 
-func (fs *FileSystem) ReadDir(ctx context.Context, name string) (fis []fs.FileInfo, err error) {
-	defer func() {
-		if err != nil {
-			logger.Errorf("列举文件夹 '%s' 失败: %v", name, err)
-		} else {
-			logger.Infof("列举文件夹 '%s' 成功, 子文件数: %d", name, len(fis))
-		}
-	}()
+func (fs *EncryptFileSystem) Mkdir(name string, perm os.FileMode) (err error) {
+	defer func() { logAferoOp("Mkdir", name, err) }()
+	return fs.fs.Mkdir(name, perm)
+}
 
-	fis, err = fs.client.ReadDir(fs.resolveName(name))
-	for idx := range fis {
-		fi := NewFileInfo(fs.masterKey, fis[idx])
-		fis[idx] = fi
+func (fs *EncryptFileSystem) MkdirAll(path string, perm os.FileMode) (err error) {
+	defer func() { logAferoOp("MkdirAll", path, err) }()
+	return fs.fs.MkdirAll(path, perm)
+}
+
+func (fs *EncryptFileSystem) Open(name string) (result afero.File, err error) {
+	defer func() { logAferoOp("Open", name, err) }()
+	file, err := fs.fs.Open(name)
+	if err != nil {
+		return nil, err
 	}
-	return
+	return NewEncryptFile(file, fs.masterKey), nil
+}
+
+func (fs *EncryptFileSystem) OpenFile(name string, flag int, perm os.FileMode) (result afero.File, err error) {
+	defer func() { logAferoOp("OpenFile", name, err) }()
+	file, err := fs.fs.OpenFile(name, flag, perm)
+	if err != nil {
+		return nil, err
+	}
+	return NewEncryptFile(file, fs.masterKey), nil
+}
+
+func (fs *EncryptFileSystem) Remove(name string) (err error) {
+	defer func() { logAferoOp("Remove", name, err) }()
+	return fs.fs.Remove(name)
+}
+
+func (fs *EncryptFileSystem) RemoveAll(path string) (err error) {
+	defer func() { logAferoOp("RemoveAll", path, err) }()
+	return fs.fs.RemoveAll(path)
+}
+
+func (fs *EncryptFileSystem) Rename(oldname, newname string) (err error) {
+	defer func() { logAferoOp("Rename", oldname, err) }()
+	return fs.fs.Rename(oldname, newname)
+}
+
+func (fs *EncryptFileSystem) Stat(name string) (result os.FileInfo, err error) {
+	defer func() { logAferoOp("Stat", name, err) }()
+	fi, err := fs.fs.Stat(name)
+	if err != nil {
+		return nil, err
+	}
+
+	return NewEncryptFileInfo(fi), nil
+	// return fs.fs.Stat(name)
+}
+
+func (fs *EncryptFileSystem) Name() string {
+	return "span"
+}
+
+func (fs *EncryptFileSystem) Chmod(name string, mode os.FileMode) (err error) {
+	defer func() { logAferoOp("Chmod", name, err) }()
+	return fs.fs.Chmod(name, mode)
+}
+
+func (fs *EncryptFileSystem) Chown(name string, uid, gid int) (err error) {
+	defer func() { logAferoOp("Chown", name, err) }()
+	return fs.fs.Chown(name, uid, gid)
+}
+
+func (fs *EncryptFileSystem) Chtimes(name string, atime time.Time, mtime time.Time) (err error) {
+	defer func() { logAferoOp("Chtimes", name, err) }()
+	return fs.fs.Chtimes(name, atime, mtime)
+}
+
+// --- helpers ---
+
+func logAferoOp(op, name string, err error) {
+	if err != nil {
+		logger.Errorf("%s '%s' 失败: %v", op, name, err)
+	} else {
+		logger.Infof("%s '%s' 成功", op, name)
+	}
+}
+
+// webdavFS implements webdav.FileSystem, delegating to an underlying afero.Fs
+// with context-aware logging. This is a separate type because afero.Fs and
+// webdav.FileSystem have conflicting method signatures (Mkdir, OpenFile, etc.).
+type webdavFS struct {
+	fs afero.Fs
+}
+
+var _ webdav.FileSystem = &webdavFS{}
+
+// NewWebdavFileSystem creates a webdav.FileSystem that wraps an afero.Fs.
+func NewWebdavFileSystem(fs afero.Fs) webdav.FileSystem {
+	return &webdavFS{
+		fs: fs,
+	}
+}
+
+// --- webdav.FileSystem ---
+
+func (w *webdavFS) Mkdir(ctx context.Context, name string, perm os.FileMode) (err error) {
+	return w.fs.Mkdir(name, perm)
+}
+
+func (w *webdavFS) OpenFile(ctx context.Context, name string, flag int, perm os.FileMode) (result webdav.File, err error) {
+	// webdav.Handler uses O_RDWR for PUT, but afero-webdav only supports
+	// O_WRONLY for writes. Convert when write flags are present.
+	if flag&os.O_RDWR != 0 {
+		flag = (flag &^ os.O_RDWR) | os.O_WRONLY
+	}
+
+	// afero-webdav's write stream is asynchronous: data is buffered via io.Pipe
+	// and only sent to the upstream on Close(). handlePut calls f.Stat() between
+	// Copy and Close, which fails if the upstream file doesn't exist yet.
+	// Pre-create the file via Create() (which writes an empty file synchronously)
+	// so that the subsequent Stat() succeeds.
+	if flag&(os.O_WRONLY|os.O_CREATE) != 0 {
+		return w.fs.Create(name)
+	}
+
+	return w.fs.OpenFile(name, flag, perm)
+}
+
+func (w *webdavFS) RemoveAll(ctx context.Context, name string) (err error) {
+	return w.fs.RemoveAll(name)
+}
+
+func (w *webdavFS) Rename(ctx context.Context, oldName, newName string) (err error) {
+	return w.fs.Rename(oldName, newName)
+}
+
+func (w *webdavFS) Stat(ctx context.Context, name string) (fi os.FileInfo, err error) {
+	return w.fs.Stat(name)
 }

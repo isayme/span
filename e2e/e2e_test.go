@@ -13,6 +13,7 @@ import (
 	"span/internal/utils"
 	"testing"
 
+	webdavfs "github.com/isayme/afero-webdav"
 	"github.com/isayme/go-logger"
 	"github.com/stretchr/testify/require"
 	"github.com/studio-b12/gowebdav"
@@ -73,7 +74,7 @@ func TestE2E(t *testing.T) {
 	upstreamClient.SetHeader("User-Agent", internal.UserAgent)
 	require.NoError(t, upstreamClient.Connect())
 
-	fs := internal.NewFileSystem(upstreamClient, masterKey)
+	fs := internal.NewWebdavFileSystem(internal.NewEncrytFileSystem(webdavfs.New(upstreamClient), masterKey))
 	spanHandler := &webdav.Handler{
 		FileSystem: fs,
 		LockSystem: webdav.NewMemLS(),
