@@ -102,31 +102,58 @@ func (f *encryptFile) Read(p []byte) (n int, err error) {
 		}
 	}
 
-	buf := bufferpool.Get(constants.AesBlockSize)
+	// Read ahead to avoid repeated Seek on small or non-aligned reads.
+	// Each AES block was encrypted with a position-based IV
+	// (GenIV(blockPos)), so we must decrypt block-by-block even
+	// when reading ahead.
+	need := len(p) + skip
+	if need < constants.AesBlockSize*4 {
+		need = constants.AesBlockSize * 4
+	}
+	if need%constants.AesBlockSize != 0 {
+		need = (need/constants.AesBlockSize + 1) * constants.AesBlockSize
+	}
+
+	buf := bufferpool.Get(need)
 	defer bufferpool.Put(buf)
 	nr, err := io.ReadFull(f.File, buf)
-	if err == io.EOF {
-		return
+	if err != nil && err != io.ErrUnexpectedEOF {
+		if err == io.EOF {
+			return 0, io.EOF
+		}
+		return 0, err
+	}
+	if nr == 0 {
+		return 0, io.EOF
 	}
 
 	iv := bufferpool.Get(constants.AesBlockSize)
 	defer bufferpool.Put(iv)
-	utils.GenIV(blockStart, iv)
-	_, err = utils.DecryptFileContent(f.fileKey, iv, buf[:nr])
-	if err != nil {
-		return
+	for off := 0; off < nr; off += constants.AesBlockSize {
+		blockEnd := off + constants.AesBlockSize
+		if blockEnd > nr {
+			blockEnd = nr
+		}
+		utils.GenIV(blockStart+int64(off), iv)
+		_, err = utils.DecryptFileContent(f.fileKey, iv, buf[off:blockEnd])
+		if err != nil {
+			return
+		}
 	}
 
-	// Remove the prefix that the caller has already consumed.
 	if skip >= nr {
 		return 0, io.EOF
 	}
+
 	data := buf[skip:nr]
 
-	f.readPos = f.readPos + int64(len(data))
-	f.readBuffer.Write(data)
+	f.readPos += int64(len(data))
+	n = copy(p, data)
+	if remaining := data[n:]; len(remaining) > 0 {
+		f.readBuffer.Write(remaining)
+	}
 
-	return f.readBuffer.Read(p)
+	return
 }
 
 func (f *encryptFile) Seek(offset int64, whence int) (int64, error) {
