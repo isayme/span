@@ -11,8 +11,8 @@ import (
 	"span/internal/config"
 	"span/internal/utils"
 
-	"github.com/go-chi/chi/middleware"
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	webdavfs "github.com/isayme/afero-webdav"
 	"github.com/isayme/go-logger"
 	"github.com/isayme/go-uuidv4"
