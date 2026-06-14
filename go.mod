@@ -5,7 +5,7 @@ go 1.26.2
 require (
 	github.com/boltdb/bolt v1.3.1
 	github.com/go-chi/chi/v5 v5.3.0
-	github.com/isayme/afero-webdav v0.0.0-20260529091611-96466d94465b
+	github.com/isayme/afero-webdav v0.1.1
 	github.com/isayme/go-bufferpool v0.1.0
 	github.com/isayme/go-config v0.3.0
 	github.com/isayme/go-logger v0.3.1
@@ -16,7 +16,7 @@ require (
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.11.1
 	github.com/studio-b12/gowebdav v0.12.0
-	golang.org/x/crypto v0.51.0
+	golang.org/x/crypto v0.52.0
 	golang.org/x/net v0.55.0
 )
 
